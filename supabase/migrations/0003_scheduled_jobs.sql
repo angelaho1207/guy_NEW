@@ -101,7 +101,7 @@ end;
 $fn$;
 
 -- ---------------------------------------------------------------------------
--- Handshake and token hygiene
+-- Handshake and connect-token hygiene
 -- ---------------------------------------------------------------------------
 
 -- confirm_exchange() already refuses a late confirmation, so this sweep is not
@@ -129,7 +129,7 @@ begin
 end;
 $fn$;
 
-create or replace function public.purge_spent_qr_tokens()
+create or replace function public.purge_spent_connect_tokens()
 returns integer
 language plpgsql
 security definer
@@ -139,7 +139,7 @@ declare
   v_count integer;
 begin
   with gone as (
-    delete from public.qr_tokens
+    delete from public.connect_tokens
      where expires_at < now() - interval '1 day'
     returning 1
   )
@@ -175,7 +175,7 @@ select cron.schedule(
 );
 
 select cron.schedule(
-  'guy-purge-qr-tokens',
+  'guy-purge-connect-tokens',
   '17 4 * * *',
-  $cron$ select public.purge_spent_qr_tokens(); $cron$
+  $cron$ select public.purge_spent_connect_tokens(); $cron$
 );

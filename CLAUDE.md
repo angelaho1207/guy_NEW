@@ -26,10 +26,9 @@ The brief this was built from says to stop and ask when a detail needed to
 implement something correctly is not specified, rather than picking a default
 silently. That has held so far and should keep holding.
 
-Thirteen such points are recorded in `docs/01-open-questions.md`. Where a
-default had to be picked to keep moving, the file says which way it went and
-where the one line is that changes it. Add to that file rather than quietly
-deciding.
+Every such point found so far is recorded in `docs/01-open-questions.md`, and
+all of them have now been answered. Add to that file rather than quietly
+deciding, and record the answer there when it comes back.
 
 `docs/03-decisions.md` is for choices that are settled, with the reasoning.
 
@@ -77,7 +76,11 @@ there is no build step and no test framework dependency.
   ordinary shareable fields. Anything that shows a person's name must handle
   both halves being withheld, and fall back to the username.
 - Lists of 1:1 requests read `public.visible_one_on_ones`, never the table. A
-  declined request disappears from both people's lists.
+  declined request disappears from both people's lists and sends no push.
+- Connecting never takes an account id. Both paths redeem a connect token
+  through `public.open_exchange(token, method)`. If you find yourself adding a
+  function that accepts a user id to start an exchange, that is the bug D11
+  exists to prevent.
 
 ## What is not built yet
 

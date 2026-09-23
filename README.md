@@ -14,30 +14,25 @@ way.
 
 | | Status |
 |---|---|
-| Schema, RLS, consent projection | Done, 101 tests against real Postgres |
+| Schema, RLS, consent projection | Done, 106 tests against real Postgres |
 | Exchange handshake, QR tokens | Done, server side |
 | Reminders, 1:1 windows, scheduled jobs | Done, server side |
-| Shared domain logic and design tokens | Done, 51 tests |
+| Shared domain logic and design tokens | Done, 68 tests |
 | Next.js web app | Not started |
 | React Native app | Not started |
 | Swift Nearby Interaction module | **Blocked on the spike below** |
 
 ### What is blocked
 
-1. **The Nearby Interaction spike has not been run.** The brief puts it first,
-   and it needs a Mac, an Apple Developer account and two physical iPhones.
-   None of those were available. A ready-to-build harness and a measurement
-   protocol are in [`ios-spike/`](ios-spike/) and
-   [`docs/02-uwb-spike.md`](docs/02-uwb-spike.md).
+**The Nearby Interaction spike has not been run.** The brief puts it first, and
+it needs a Mac, an Apple Developer account and two physical iPhones. None of
+those were available. A ready-to-build harness and a measurement protocol are
+in [`ios-spike/`](ios-spike/) and [`docs/02-uwb-spike.md`](docs/02-uwb-spike.md).
 
-2. **The UWB path has no identity check.** Nearby Interaction reports a
-   distance, not an account, and the server currently takes the peer's account
-   id from the client on trust. See
-   [`docs/05-how-the-uwb-path-works.md`](docs/05-how-the-uwb-path-works.md) for
-   how the path works and how to close it.
-
-Every other open question was answered on 23 Sep 2026 and is implemented and
-tested. See [`docs/01-open-questions.md`](docs/01-open-questions.md).
+That is the only thing outstanding. Every open question has been answered and
+implemented; see [`docs/01-open-questions.md`](docs/01-open-questions.md), and
+[`docs/05-how-the-uwb-path-works.md`](docs/05-how-the-uwb-path-works.md) for how
+the tap path works end to end.
 
 ## Layout
 
@@ -74,3 +69,7 @@ off hides it from everyone immediately; turning it on reveals it to everyone
 immediately, including people they met while it was off. There is no
 per-connection field set. `connections.fields_at_exchange` records what was
 shared the day two people met and is never consulted to decide access.
+
+**Nobody ever names an account to connect.** Both the QR and the tap path
+redeem a short-lived single-use token, through the same function. You cannot
+reach someone you are not standing next to.

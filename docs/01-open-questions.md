@@ -4,7 +4,8 @@ The brief says to stop and ask rather than guess. This file tracks those
 points. Most were answered on 23 Sep 2026; the answers are recorded here and
 the behaviour is implemented and tested.
 
-**Still open:** Q7 (UWB identity). Everything else is settled.
+**Nothing is open.** Every question here has been answered and the behaviour
+is implemented and tested.
 
 ---
 
@@ -82,7 +83,7 @@ out. That is what was already implemented, so nothing changed.
 **Answered: a plain "Already connected!" with an OK button, and nothing else
 happens.**
 
-Both `open_qr_exchange()` and `open_uwb_exchange()` now return
+`open_exchange()` now returns
 `('already_connected', null)` instead of opening a handshake, so no prompt is
 raised on either phone and nothing about the existing connection changes. The
 scanned code is also left unspent, so a mistaken scan does not cost the other
@@ -129,6 +130,39 @@ Unchanged and still in force, except that `name` became `first_name` and
 | Push title | "To do" for reminders, "Guy" otherwise |
 | Notes ordering | newest first |
 
+### Q7 — How does the UWB path prove who the nearby device belongs to?
+
+**Answered: option 2, the same short-lived token the QR path uses.**
+
+Nearby Interaction proves two phones are touching but says nothing about whose
+accounts they are, so the identity claim has to travel over the Bluetooth
+discovery channel. It now travels as a connect token, never as an account id.
+
+What changed:
+
+- `qr_tokens` became `connect_tokens`, and `mint_qr_token()` became
+  `mint_connect_token()`. The token was never QR-specific; the name was.
+- `open_qr_exchange()` and `open_uwb_exchange()` collapsed into one
+  `open_exchange(token, method)`. Both paths were identical past the first
+  step, and two functions doing the same job would have drifted.
+- The account-id argument is gone. A client that names a person it is not
+  standing next to gets "expired or already used", because an account id is
+  not a token.
+
+The remaining exposure, stated plainly: a Bluetooth broadcast can be overheard
+at range, unlike a QR code that has to be pointed at. Single use, a short life
+and the two-sided confirmation bound it. That is why the token life stays short
+rather than being stretched for convenience.
+
+The earlier note that this would cost the ability to connect offline was wrong,
+and is withdrawn. Guy could never complete an exchange offline on either path,
+because the connection rows are created by the server and profile data never
+moves phone to phone. Minting a token is one more round trip on a path that
+already required the network.
+
+[`05-how-the-uwb-path-works.md`](./05-how-the-uwb-path-works.md) explains the
+whole path end to end.
+
 ### Q12 — What happens to a connection when someone deletes their account?
 
 **Answered: your notes about them go too.** Acknowledged as not necessarily
@@ -161,22 +195,3 @@ not accumulate into a history.
 
 ---
 
-## Still open
-
-### Q7 — How does the UWB path prove who the nearby device belongs to?
-
-**Still open, and it blocks shipping the UWB path.**
-
-[`05-how-the-uwb-path-works.md`](./05-how-the-uwb-path-works.md) explains the
-mechanism end to end and where the hole is. In short: Nearby Interaction gives
-you a distance, not an identity, and `open_uwb_exchange()` currently takes the
-peer's account id from the client and believes it. A modified client could make
-a confirmation prompt appear on a stranger's phone. Nothing leaks unless that
-stranger confirms, so it is a nuisance rather than a breach, but it should not
-ship.
-
-The fix is to reuse the QR path's short-lived single-use token, passed over the
-Bluetooth channel during discovery. It does not depend on the spike's outcome.
-It does carry a product cost: two people could no longer tap with no signal,
-because the token has to come from the server first. That trade is yours to
-make.

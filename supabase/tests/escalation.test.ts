@@ -35,10 +35,10 @@ before(async () => {
   );
 
   const minted = row<{ token: string }>(
-    await db.as(alice, `select * from public.mint_qr_token(120)`),
+    await db.as(alice, `select * from public.mint_connect_token(120)`),
   );
   const id = row<{ exchange_id: string }>(
-    await db.as(bob, `select * from public.open_qr_exchange($1)`, [minted.token]),
+    await db.as(bob, `select * from public.open_exchange($1, 'qr')`, [minted.token]),
   ).exchange_id;
   await db.as(bob, `select public.confirm_exchange($1)`, [id]);
   await db.as(alice, `select public.confirm_exchange($1)`, [id]);
@@ -218,10 +218,10 @@ describe('identity columns', () => {
 describe('the exchange state machine', () => {
   test('a client cannot mark an exchange completed itself', async () => {
     const minted = row<{ token: string }>(
-      await db.as(alice, `select * from public.mint_qr_token(120)`),
+      await db.as(alice, `select * from public.mint_connect_token(120)`),
     );
     const id = row<{ exchange_id: string }>(
-      await db.as(bob, `select * from public.open_qr_exchange($1)`, [minted.token]),
+      await db.as(bob, `select * from public.open_exchange($1, 'qr')`, [minted.token]),
     ).exchange_id;
 
     const err = await db.asExpectingFailure(
@@ -237,10 +237,10 @@ describe('the exchange state machine', () => {
     // already-connected pair never opens an exchange at all.
     const erin = await db.createUser('erin', 'Erin', 'East');
     const minted = row<{ token: string }>(
-      await db.as(erin, `select * from public.mint_qr_token(120)`),
+      await db.as(erin, `select * from public.mint_connect_token(120)`),
     );
     const id = row<{ exchange_id: string }>(
-      await db.as(bob, `select * from public.open_qr_exchange($1)`, [minted.token]),
+      await db.as(bob, `select * from public.open_exchange($1, 'qr')`, [minted.token]),
     ).exchange_id;
 
     // Bob confirms for himself, which is allowed.
@@ -270,6 +270,110 @@ describe('the exchange state machine', () => {
       [requestId],
     );
     assert.match(err, /permission denied/i);
+  });
+});
+
+describe('reaching someone you are not standing next to', () => {
+  // Nearby Interaction proves proximity but says nothing about identity, so
+  // the account claim has to travel on the Bluetooth channel. It travels as a
+  // connect token, never as an account id, which is what stops a modified
+  // client raising a prompt on a stranger's phone from anywhere in the world.
+
+  test('there is no way to open an exchange by naming an account', async () => {
+    const target = await db.createUser('target', 'Tara', 'Target');
+
+    const err = await db.asExpectingFailure(
+      bob,
+      `select * from public.open_exchange($1, 'uwb')`,
+      [target],
+    );
+    assert.match(
+      err,
+      /expired or already used/,
+      'an account id is not a token, so it simply does not resolve',
+    );
+
+    const n = row<{ n: number }>(
+      await db.admin(
+        `select count(*)::int as n from public.exchanges
+          where responder_id = '${target}'`,
+      ),
+    );
+    assert.equal(Number(n.n), 0, 'no prompt was raised on the target');
+  });
+
+  test('a guessed token gets nowhere', async () => {
+    const err = await db.asExpectingFailure(
+      bob,
+      `select * from public.open_exchange($1, 'uwb')`,
+      ['not-a-real-token-aaaaaaaaaaaaaaaaaaaaaaaa'],
+    );
+    assert.match(err, /expired or already used/);
+  });
+
+  test('an overheard token stops working once it is spent', async () => {
+    // A Bluetooth broadcast can be overheard at range, unlike a QR code that
+    // has to be pointed at. Single use is what bounds that exposure.
+    const ana = await db.createUser('ana', 'Ana', 'Apple');
+    const ben = await db.createUser('ben', 'Ben', 'Birch');
+    const eve = await db.createUser('eve', 'Eve', 'Eaves');
+
+    const minted = row<{ token: string }>(
+      await db.as(ana, `select * from public.mint_connect_token(120)`),
+    );
+
+    // Ben is the one actually standing there, and redeems it.
+    const opened = row<{ status: string }>(
+      await db.as(ben, `select * from public.open_exchange($1, 'uwb')`, [minted.token]),
+    );
+    assert.equal(opened.status, 'opened');
+
+    // Eve overheard the same broadcast and tries to reuse it.
+    const err = await db.asExpectingFailure(
+      eve,
+      `select * from public.open_exchange($1, 'uwb')`,
+      [minted.token],
+    );
+    assert.match(err, /expired or already used/);
+  });
+
+  test('a token is useless once it expires, even unspent', async () => {
+    const ana = await db.createUser('ana2', 'Ana', 'Apple');
+    const minted = row<{ token: string }>(
+      await db.as(ana, `select * from public.mint_connect_token(120)`),
+    );
+    await db.admin(
+      `update public.connect_tokens set expires_at = now() - interval '1 second'
+        where token = $1`,
+      [minted.token],
+    );
+
+    const err = await db.asExpectingFailure(
+      bob,
+      `select * from public.open_exchange($1, 'uwb')`,
+      [minted.token],
+    );
+    assert.match(err, /expired or already used/);
+  });
+
+  test('both paths redeem the same kind of token', async () => {
+    // One trust model, not two. The method argument only records how they met.
+    const ana = await db.createUser('ana3', 'Ana', 'Apple');
+    const minted = row<{ token: string }>(
+      await db.as(ana, `select * from public.mint_connect_token(120)`),
+    );
+
+    const opened = row<{ status: string; exchange_id: string }>(
+      await db.as(bob, `select * from public.open_exchange($1, 'uwb')`, [minted.token]),
+    );
+    assert.equal(opened.status, 'opened');
+
+    const ex = row<{ method: string }>(
+      await db.admin(
+        `select method from public.exchanges where id = '${opened.exchange_id}'`,
+      ),
+    );
+    assert.equal(ex.method, 'uwb', 'the method is recorded, not trusted');
   });
 });
 

@@ -45,9 +45,11 @@ second.
 
 **5. The app decides "that was a tap".**
 Nothing tells you two phones touched. You get a distance, and you pick a
-threshold and a dwell time: something like "under 10cm for at least half a
-second". When that fires, the app raises the confirmation prompt. Both people
-confirm, and only then does the server create the two connection rows.
+threshold and a dwell time. Those two numbers are `TAP_DISTANCE_METRES` and
+`TAP_DWELL_MS` in `packages/shared/src/connect.ts`. The dwell requirement is
+what stops a phone carried past you from raising a prompt. When it fires, the
+app raises the confirmation prompt, both people confirm, and only then does the
+server create the two connection rows.
 
 Steps 1 through 3 take a moment. Step 4 to first reading is one of the things
 the spike measures.
@@ -56,7 +58,7 @@ the spike measures.
 
 Nothing goes over UWB or Bluetooth except the discovery tokens. The profile
 exchange itself is an ordinary server call, exactly the same one the QR path
-makes. Both phones talk to Supabase. `open_uwb_exchange()` opens the handshake,
+makes. Both phones talk to Supabase. `open_exchange()` opens the handshake,
 each side calls `confirm_exchange()`, and the second confirmation creates both
 connection rows.
 
@@ -67,73 +69,67 @@ about each other. Everything after that is shared:
 |---|---|---|
 | Finding the other person | Bluetooth discovery | Camera reads a code |
 | Confirming it is a deliberate tap | Distance under a threshold | The scan itself |
-| Proving which account | **unsolved, see below** | Short-lived single-use token |
+| Proving which account | Short-lived single-use token | Short-lived single-use token |
 | Both people confirm | Same | Same |
 | Creating the connection | Same | Same |
 
-That last column is why the QR path was built first and is fully tested, while
-the UWB path stops at the server boundary.
+Only the first two rows differ, and both of those live on the phone. Everything
+from "prove which account" onward is literally the same function.
 
-## Where the hole is
+## Proving which account the other phone belongs to
 
 Look again at step 3. The two apps swapped discovery tokens over Bluetooth. A
 discovery token says "this radio", not "this Guy account". Something has to
 carry the claim *"the phone you are ranging against belongs to @ana"*, and
 whatever carries that claim is what an attacker would forge.
 
-Right now `public.open_uwb_exchange(p_other uuid)` takes the peer's account id
-as an argument and believes it. A modified client can call it with any account
-id at all and make a confirmation prompt appear on a stranger's phone, with no
-UWB, no Bluetooth and no proximity involved.
+An earlier version took the peer's account id as an argument and believed it.
+That let a modified client call the server with any account id at all and raise
+a confirmation prompt on a stranger's phone, with no UWB, no Bluetooth and no
+proximity involved. Nothing leaked, because the stranger still had to confirm,
+but it was a spam and social-engineering vector.
 
-To be clear about the blast radius: this is a nuisance, not a data leak.
-Nothing is shared unless that stranger taps confirm on a prompt naming someone
-they are not standing next to. But it is a spam and social-engineering vector,
-and it should not ship.
+**Now both paths redeem a connect token**, and neither accepts an account id.
 
-## How I would fix it
-
-Reuse the QR path's answer, because it is the same problem.
-
-The QR path already solves "prove which account" with a short-lived, single-use
-token minted by the server. A screenshot of a code is worthless because the
-token expires and can only be spent once. The UWB path can do the same thing,
-with the Bluetooth channel standing in for the camera:
-
-1. When the connect screen opens, the app mints a token, exactly as the code
-   screen does today.
-2. During step 3, each phone sends that token alongside its discovery token.
+1. When the connect screen opens, the app mints a token from the server. Random,
+   single use, short lived.
+2. During step 3, each phone broadcasts that token alongside its discovery
+   token.
 3. Once ranging says the phones touched, the app calls
-   `open_uwb_exchange(p_token text)` with the token it received.
-4. The server resolves token to account. It never takes an account id from a
-   client.
+   `public.open_exchange(token, 'uwb')` with the token it received.
+4. The server resolves the token to an account. A client that names an account
+   gets nowhere, because an account id is not a token and simply does not
+   resolve.
 
-That makes the two paths structurally identical, which is worth something on
-its own: one trust model to reason about rather than two. `mint_qr_token()`
-would want a more honest name, since it would no longer be QR-specific.
+A client that keeps the connect screen open past the token's life re-mints,
+which retires the previous one. Only the current token is ever redeemable.
 
-The one thing to watch is that a token broadcast over Bluetooth is observable
-by anything in radio range, unlike a QR code which has to be pointed at. Single
-use plus a short expiry plus the fact that both people still have to confirm
-makes that acceptable, but it is the reason the expiry should stay short rather
-than being relaxed for convenience.
+The `method` argument records how the two met, for the connection row and the
+UI. It is not a trust input, and a client that misreports it gains nothing.
 
-## Why this is still open
+### What this does and does not buy
 
-Two reasons, and only one of them is the spike.
+It makes the two paths structurally identical: one trust model to reason about
+rather than two. To open an exchange with someone you must present a token you
+could only have obtained by reading their screen or by being in Bluetooth range
+of their phone.
 
-The spike decides *when* the prompt can be raised, which changes where in the
-flow the token is minted and how long it has to stay valid. If both apps must
-be in the foreground, the token can be minted when the connect screen opens and
-live for a minute. If backgrounding works, the token has to survive longer, and
-its exposure window grows.
+The honest caveat: a Bluetooth broadcast can be overheard at range, while a QR
+code has to be pointed at. So the UWB token has a wider exposure than the QR
+one. Three things bound it. The token is single use, so whoever redeems it
+first spends it. It expires quickly. And redeeming it only opens a handshake
+that the other person still has to confirm, on a prompt naming someone they are
+not standing next to.
 
-The second reason is that this is a product decision as much as a security one.
-Making the UWB path token-based means the app has to have reached the server
-before two people can tap, which rules out connecting on a conference floor
-with no signal. That may be a fine trade, or it may not be, and it is not my
-call to make silently.
+That is why the token life is kept short rather than stretched for convenience,
+and why the refresh interval sits just inside it rather than well inside it.
+Both numbers live in `packages/shared/src/connect.ts`, with a test that fails if
+they drift from the database.
 
-Say the word and I will implement the token version. It does not depend on the
-spike's outcome, only on the exposure window, so it can be built now and tuned
-after.
+## What is left
+
+The spike. It decides *when* the prompt can be raised and therefore how long a
+token has to stay live: a foreground-only flow mints when the connect screen
+opens, while a backgrounded flow would need a token alive for longer and would
+widen the exposure above. The mechanism does not change either way, only the
+tuning.

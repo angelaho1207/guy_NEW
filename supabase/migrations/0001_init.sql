@@ -161,13 +161,25 @@ create trigger profiles_seed_shares
   for each row execute function public.seed_profile_field_shares();
 
 -- ---------------------------------------------------------------------------
--- QR tokens
+-- Connect tokens
 -- ---------------------------------------------------------------------------
 
--- A QR code never encodes a bare user id. It encodes a random, single-use,
--- short-lived token. A screenshotted code is worthless once it expires or is
--- consumed, and consuming it only *opens* an exchange, never completes one.
-create table public.qr_tokens (
+-- How one phone proves to the server which account the other phone belongs to.
+-- Used by BOTH connect paths, which is the point: there is one answer to
+-- "which account is this", not two.
+--
+--   QR:  the code on screen encodes this token. Reading it requires pointing a
+--        camera at the screen.
+--   UWB: the token is broadcast over the Bluetooth discovery channel alongside
+--        the Nearby Interaction discovery token. Nearby Interaction proves
+--        proximity but says nothing about identity, so this carries identity.
+--
+-- Neither path ever sends an account id. A client that names an account gets
+-- nowhere; it has to present a token it could only have obtained by being
+-- there. The token is random, single use and short lived, so a screenshot or
+-- an overheard broadcast is worthless shortly afterwards. Redeeming a token
+-- only *opens* an exchange. Both people still confirm.
+create table public.connect_tokens (
   token       text primary key,
   user_id     uuid not null references public.profiles(user_id) on delete cascade,
   created_at  timestamptz not null default now(),
@@ -176,7 +188,8 @@ create table public.qr_tokens (
   consumed_by uuid references public.profiles(user_id) on delete set null
 );
 
-create index qr_tokens_user_idx on public.qr_tokens (user_id, expires_at desc);
+create index connect_tokens_user_idx
+  on public.connect_tokens (user_id, expires_at desc);
 
 -- ---------------------------------------------------------------------------
 -- Exchanges (the two-sided handshake)

@@ -10,8 +10,8 @@ be overturned on purpose rather than discovered by accident.
 `profiles` is readable only by the person it describes. No other user holds a
 `SELECT` grant on someone else's row, at any time, for any reason. The only
 path from one user to another user's data is
-`public.project_shared_profile()`, a `SECURITY DEFINER` function that takes the
-field set frozen into the connection and returns nothing outside it.
+`public.project_shared_profile()`, a `SECURITY DEFINER` function that returns
+exactly what its subject is currently sharing and nothing outside it.
 
 The alternative is the usual one: let the API read profiles freely and filter
 in Node before responding. That works right up until one endpoint forgets, and
@@ -32,8 +32,9 @@ Several of those grants are **column level**, which is the part most easily
 missed. A row policy answers "is this your row". It does not answer "may you
 change this particular column of your own row", and four columns here belong to
 the system even though they sit on a row the user owns:
-`connections.shared_fields`, `connections.other_id`, `reminders.fire_at` and
-`profiles.username`. See D6 for what happened when they were granted broadly.
+`connections.fields_at_exchange`, `connections.other_id`, `reminders.fire_at`
+and `profiles.username`. See D6 for what happened when they were granted
+broadly.
 
 ---
 
@@ -189,12 +190,14 @@ written, two of them leaks:
 - **The owner of a connection could widen it.** A row policy answers "is this
   your row", not "may you change this column of your own row". With a
   table-level `UPDATE` grant, a modified client could set its own
-  `shared_fields` to every field in the enum and project the other person's
-  entire profile. Fixed with column-level grants. The same class of hole let a
-  client move `reminders.fire_at` past the 7 day ceiling.
+  `fields_at_exchange` (then called `shared_fields`, and then still load
+  bearing) to every field in the enum and project the other person's entire
+  profile. Fixed with column-level grants. The same class of hole let a client
+  move `reminders.fire_at` past the 7 day ceiling.
 
-- An ambiguous column reference in `mint_qr_token()`, where the function's OUT
-  parameters shadowed the table's own columns.
+- An ambiguous column reference in `mint_connect_token()`, then named
+  `mint_qr_token()`, where the function's OUT parameters shadowed the table's
+  own columns.
 
 - A complete absence of table-level `GRANT`s, which would have locked every
   authenticated user out of the whole schema regardless of policy.
@@ -204,18 +207,19 @@ is now the file that tries what a modified client would try.
 
 ---
 
-## D7 — QR codes are random single-use tokens with a short life
+## D7 — Connect codes are random single-use tokens with a short life
 
 The brief flags this before building, and it is right that a static code is an
 impersonation risk.
 
-A code is 32 random bytes, base64url, valid for 120 seconds, single use.
-Opening the code screen mints a new one and immediately retires any previous
-live code, so only what is currently on screen can be redeemed. Redeeming a
-code does not share anything: it opens a handshake that both people still have
-to confirm, inside the 30 second window.
+A token is 32 random bytes, base64url, valid for 120 seconds, single use.
+Opening the connect screen mints a new one and immediately retires any previous
+live token, so only what is currently on screen, or currently being broadcast,
+can be redeemed. Redeeming one does not share anything: it opens a handshake
+that both people still have to confirm, inside the 30 second window.
 
-The duration is a guess, which is Q8. Everything else here follows the brief.
+D11 extended the same mechanism to the UWB path, which is why the table is
+`connect_tokens` rather than `qr_tokens`.
 
 ---
 
@@ -264,6 +268,48 @@ who asked to be forgotten.
 
 The cascade is now a decision rather than an accident. Revisit it the first
 time someone loses notes they cared about.
+
+---
+
+## D11 — One connect token, one entry point, for both paths
+
+Nearby Interaction proves that two phones are touching. It says nothing about
+whose accounts they are, so the identity claim has to travel over the Bluetooth
+discovery channel, and whatever carries it is what an attacker would forge.
+
+**Chosen:** the UWB path redeems the same short-lived, single-use token the QR
+path already used. The token is broadcast over Bluetooth alongside the Nearby
+Interaction discovery token, and the server resolves it to an account.
+
+**Rejected:** passing the peer's account id, which is what the first version
+did. It let a modified client raise a confirmation prompt on any user's phone
+from anywhere, with no proximity involved. Nothing leaked, since the prompt
+still had to be confirmed, but it was a spam and social-engineering vector.
+
+**Also rejected:** keeping the account id and adding rate limits and clearer
+prompts. Worth doing anyway, but it makes abuse harder rather than impossible.
+
+Three renames fell out of it, and they are the point rather than tidying:
+
+- `qr_tokens` became `connect_tokens`, and `mint_qr_token()` became
+  `mint_connect_token()`. The token was never QR-specific.
+- `open_qr_exchange()` and `open_uwb_exchange()` collapsed into
+  `open_exchange(token, method)`. Past the first step the two paths were
+  already identical, and two functions doing one job drift.
+- `method` is recorded, not trusted. A client that misreports it gains nothing.
+
+**The residual risk, stated plainly:** a Bluetooth broadcast can be overheard
+at range, while a QR code has to be pointed at, so the UWB token is more
+exposed. Single use, a short life and the two-sided confirmation bound it. That
+is why the lifetime stays short and why the refresh interval sits just inside
+it. Both live in `packages/shared/src/connect.ts` with a test that fails if
+they drift from the database.
+
+**A cost I claimed and was wrong about:** I said this would stop two people
+connecting with no signal. It does not. Guy could never complete an exchange
+offline on either path, because the connection rows are created by the server
+and profile data never moves phone to phone. Minting a token is one more round
+trip on a path that already required the network.
 
 ---
 

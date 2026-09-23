@@ -111,10 +111,16 @@ the flow is designed rather than after.
 
 **Open. Not answered.** Nothing in the tap flow beyond the server-side
 handshake has been built, which is deliberate. The database side is done and
-tested, and it is indifferent to the outcome: `public.open_uwb_exchange()`
-opens a handshake and both people still confirm, whichever way the session
+tested, and it is indifferent to the outcome: `public.open_exchange()` redeems
+a connect token and both people still confirm, whichever way the session
 behaves.
 
-Q7 in [`01-open-questions.md`](./01-open-questions.md) is the security question
-this spike does not cover and which also needs answering before the UWB path
-ships: how the server knows which account the nearby phone actually belongs to.
+The identity question this spike does not cover, how the server knows which
+account the nearby phone belongs to, has been answered separately and
+implemented. See Q7 in [`01-open-questions.md`](./01-open-questions.md) and
+[`05-how-the-uwb-path-works.md`](./05-how-the-uwb-path-works.md).
+
+The one thing the spike still feeds back into that design is the token's
+lifetime. A foreground-only flow mints when the connect screen opens; a
+backgrounded flow would need a token alive for longer, which widens how long an
+overheard broadcast stays useful.

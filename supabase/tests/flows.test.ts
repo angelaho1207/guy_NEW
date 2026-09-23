@@ -1,4 +1,4 @@
-// QR token hygiene, reminder bounds, and the 1:1 request windows.
+// Connect token hygiene, reminder bounds, and the 1:1 request windows.
 
 import { test, before, after, describe } from 'node:test';
 import assert from 'node:assert/strict';
@@ -19,10 +19,10 @@ before(async () => {
   await db.as(bob, `update public.profiles set first_name = 'Bob', last_name = 'Birch'`);
 
   const minted = row<{ token: string }>(
-    await db.as(alice, `select * from public.mint_qr_token(120)`),
+    await db.as(alice, `select * from public.mint_connect_token(120)`),
   );
   const id = row<{ exchange_id: string }>(
-    await db.as(bob, `select * from public.open_qr_exchange($1)`, [minted.token]),
+    await db.as(bob, `select * from public.open_exchange($1, 'qr')`, [minted.token]),
   ).exchange_id;
   await db.as(bob, `select public.confirm_exchange($1)`, [id]);
   await db.as(alice, `select public.confirm_exchange($1)`, [id]);
@@ -39,7 +39,7 @@ after(async () => {
   await db.close();
 });
 
-describe('QR tokens', () => {
+describe('connect tokens', () => {
   // Alice and Bob are already connected by the fixture above, and an
   // already-connected pair is now turned away before the code is even spent.
   // These tests need someone Alice has not met.
@@ -51,7 +51,7 @@ describe('QR tokens', () => {
 
   test('a code is not a user id', async () => {
     const minted = row<{ token: string }>(
-      await db.as(alice, `select * from public.mint_qr_token(120)`),
+      await db.as(alice, `select * from public.mint_connect_token(120)`),
     );
     assert.ok(minted.token.length >= 40, 'the code must carry real entropy');
     assert.ok(
@@ -62,13 +62,13 @@ describe('QR tokens', () => {
 
   test('a code can only be redeemed once', async () => {
     const minted = row<{ token: string }>(
-      await db.as(alice, `select * from public.mint_qr_token(120)`),
+      await db.as(alice, `select * from public.mint_connect_token(120)`),
     );
-    await db.as(stranger, `select * from public.open_qr_exchange($1)`, [minted.token]);
+    await db.as(stranger, `select * from public.open_exchange($1, 'qr')`, [minted.token]);
 
     const err = await db.asExpectingFailure(
       stranger,
-      `select * from public.open_qr_exchange($1)`,
+      `select * from public.open_exchange($1, 'qr')`,
       [minted.token],
     );
     assert.match(err, /expired or already used/);
@@ -76,16 +76,16 @@ describe('QR tokens', () => {
 
   test('a screenshotted code stops working once it expires', async () => {
     const minted = row<{ token: string }>(
-      await db.as(alice, `select * from public.mint_qr_token(120)`),
+      await db.as(alice, `select * from public.mint_connect_token(120)`),
     );
     await db.admin(
-      `update public.qr_tokens set expires_at = now() - interval '1 second' where token = $1`,
+      `update public.connect_tokens set expires_at = now() - interval '1 second' where token = $1`,
       [minted.token],
     );
 
     const err = await db.asExpectingFailure(
       stranger,
-      `select * from public.open_qr_exchange($1)`,
+      `select * from public.open_exchange($1, 'qr')`,
       [minted.token],
     );
     assert.match(err, /expired or already used/);
@@ -93,46 +93,46 @@ describe('QR tokens', () => {
 
   test('opening the code screen again retires the previous code', async () => {
     const first = row<{ token: string }>(
-      await db.as(alice, `select * from public.mint_qr_token(120)`),
+      await db.as(alice, `select * from public.mint_connect_token(120)`),
     );
     const second = row<{ token: string }>(
-      await db.as(alice, `select * from public.mint_qr_token(120)`),
+      await db.as(alice, `select * from public.mint_connect_token(120)`),
     );
     assert.notEqual(first.token, second.token);
 
     const err = await db.asExpectingFailure(
       stranger,
-      `select * from public.open_qr_exchange($1)`,
+      `select * from public.open_exchange($1, 'qr')`,
       [first.token],
     );
     assert.match(err, /expired or already used/);
 
     // The code currently on screen still works.
-    await db.as(stranger, `select * from public.open_qr_exchange($1)`, [second.token]);
+    await db.as(stranger, `select * from public.open_exchange($1, 'qr')`, [second.token]);
   });
 
   test('you cannot scan your own code', async () => {
     const minted = row<{ token: string }>(
-      await db.as(alice, `select * from public.mint_qr_token(120)`),
+      await db.as(alice, `select * from public.mint_connect_token(120)`),
     );
     const err = await db.asExpectingFailure(
       alice,
-      `select * from public.open_qr_exchange($1)`,
+      `select * from public.open_exchange($1, 'qr')`,
       [minted.token],
     );
     assert.match(err, /yourself/);
   });
 
   test('you cannot read anyone else\'s tokens', async () => {
-    await db.as(alice, `select * from public.mint_qr_token(120)`);
-    const visible = rows(await db.as(bob, `select token from public.qr_tokens`));
+    await db.as(alice, `select * from public.mint_connect_token(120)`);
+    const visible = rows(await db.as(bob, `select token from public.connect_tokens`));
     for (const r of visible as { token: string }[]) {
       void r;
     }
     const mine = row<{ n: number }>(
       await db.as(
         bob,
-        `select count(*)::int as n from public.qr_tokens where user_id = '${alice}'`,
+        `select count(*)::int as n from public.connect_tokens where user_id = '${alice}'`,
       ),
     );
     assert.equal(mine.n, 0);

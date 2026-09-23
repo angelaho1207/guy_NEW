@@ -36,11 +36,19 @@ stripping rather than a build step. Developed against Node 24.
 
    **If you have already applied an earlier version of these files to a real
    database, reset it rather than re-running them.** The answers of 23 Sep 2026
-   changed `0001` and `0002` in place: `name` became `first_name` and
-   `last_name`, `discord_id` was added, and two functions changed their return
-   type, which Postgres will not do through `create or replace`. Editing
-   applied migrations is normally forbidden, and this was only safe because no
-   database had them yet. From here they are append-only.
+   changed `0001` through `0003` in place, and several of those changes cannot
+   be replayed with `create or replace`:
+
+   - `name` became `first_name` and `last_name`, and `discord_id` was added.
+   - `connections.shared_fields` became `fields_at_exchange`.
+   - `qr_tokens` became `connect_tokens`, and `mint_qr_token()` became
+     `mint_connect_token()`.
+   - `open_qr_exchange()` and `open_uwb_exchange()` collapsed into
+     `open_exchange(token, method)`.
+   - `project_shared_profile()` lost its field-list argument.
+
+   Editing applied migrations is normally forbidden, and this was only safe
+   because no database had them yet. From here they are append-only.
 
    ```
    supabase link --project-ref <ref>

@@ -24,10 +24,10 @@ after(async () => {
 /** Runs a full QR exchange between two users and returns the exchange id. */
 async function completeExchange(a: string, b: string) {
   const minted = row<{ token: string }>(
-    await db.as(a, `select * from public.mint_qr_token(120)`),
+    await db.as(a, `select * from public.mint_connect_token(120)`),
   );
   const opened = row<{ exchange_id: string }>(
-    await db.as(b, `select * from public.open_qr_exchange($1)`, [minted.token]),
+    await db.as(b, `select * from public.open_exchange($1, 'qr')`, [minted.token]),
   );
   const id = opened.exchange_id;
   await db.as(b, `select public.confirm_exchange($1)`, [id]);
@@ -134,10 +134,10 @@ describe('the projection', () => {
 describe('exchange handshake', () => {
   test('one side confirming shares nothing', async () => {
     const minted = row<{ token: string }>(
-      await db.as(alice, `select * from public.mint_qr_token(120)`),
+      await db.as(alice, `select * from public.mint_connect_token(120)`),
     );
     const id = row<{ exchange_id: string }>(
-      await db.as(bob, `select * from public.open_qr_exchange($1)`, [minted.token]),
+      await db.as(bob, `select * from public.open_exchange($1, 'qr')`, [minted.token]),
     ).exchange_id;
 
     const state = row<{ confirm_exchange: string }>(
@@ -156,9 +156,9 @@ describe('exchange handshake', () => {
 
   test('a scan alone never completes an exchange', async () => {
     const minted = row<{ token: string }>(
-      await db.as(alice, `select * from public.mint_qr_token(120)`),
+      await db.as(alice, `select * from public.mint_connect_token(120)`),
     );
-    await db.as(bob, `select * from public.open_qr_exchange($1)`, [minted.token]);
+    await db.as(bob, `select * from public.open_exchange($1, 'qr')`, [minted.token]);
 
     const n = row<{ n: number }>(
       await db.admin(`select count(*)::int as n from public.connections`),
@@ -239,10 +239,10 @@ describe('exchange handshake', () => {
   test('a confirmation after the 30 second window shares nothing', async () => {
     const charlie = await db.createUser('charlie');
     const minted = row<{ token: string }>(
-      await db.as(charlie, `select * from public.mint_qr_token(120)`),
+      await db.as(charlie, `select * from public.mint_connect_token(120)`),
     );
     const id = row<{ exchange_id: string }>(
-      await db.as(bob, `select * from public.open_qr_exchange($1)`, [minted.token]),
+      await db.as(bob, `select * from public.open_exchange($1, 'qr')`, [minted.token]),
     ).exchange_id;
 
     await db.as(bob, `select public.confirm_exchange($1)`, [id]);
@@ -270,10 +270,10 @@ describe('exchange handshake', () => {
     const dana = await db.createUser('dana');
     const erin = await db.createUser('erin');
     const minted = row<{ token: string }>(
-      await db.as(dana, `select * from public.mint_qr_token(120)`),
+      await db.as(dana, `select * from public.mint_connect_token(120)`),
     );
     const id = row<{ exchange_id: string }>(
-      await db.as(erin, `select * from public.open_qr_exchange($1)`, [minted.token]),
+      await db.as(erin, `select * from public.open_exchange($1, 'qr')`, [minted.token]),
     ).exchange_id;
 
     const err = await db.asExpectingFailure(

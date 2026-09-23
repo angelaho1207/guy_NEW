@@ -11,7 +11,6 @@
 
 export const SCHEDULING_WINDOW_DAYS = 3;
 export const OUTER_LIMIT_DAYS = 14;
-export const CONFIRMATION_TIMEOUT_MS = 30_000;
 
 export type OneOnOneStatus =
   | 'pending'

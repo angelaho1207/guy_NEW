@@ -12,6 +12,12 @@ import UIKit
 /// and it logs every lifecycle event with a timestamp so the answer is on
 /// screen rather than inferred.
 ///
+/// The real module sends one more thing over this same channel: the connect
+/// token from `public.mint_connect_token()`, which is what tells the server
+/// which account the nearby phone belongs to. A discovery token identifies a
+/// radio, not a person. The spike leaves it out because it needs no server and
+/// is only measuring session lifetime. See docs/05-how-the-uwb-path-works.md.
+///
 /// Read docs/02-uwb-spike.md for the protocol this is meant to run.
 @MainActor
 final class NearbySpike: NSObject, ObservableObject {

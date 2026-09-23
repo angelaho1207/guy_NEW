@@ -30,10 +30,10 @@ before(async () => {
   );
 
   const minted = row<{ token: string }>(
-    await db.as(alice, `select * from public.mint_qr_token(120)`),
+    await db.as(alice, `select * from public.mint_connect_token(120)`),
   );
   const id = row<{ exchange_id: string }>(
-    await db.as(bob, `select * from public.open_qr_exchange($1)`, [minted.token]),
+    await db.as(bob, `select * from public.open_exchange($1, 'qr')`, [minted.token]),
   ).exchange_id;
   await db.as(bob, `select public.confirm_exchange($1)`, [id]);
   await db.as(alice, `select public.confirm_exchange($1)`, [id]);
@@ -245,7 +245,7 @@ describe('required profile content', () => {
 describe('tapping someone you already know', () => {
   test('says "already connected" instead of opening an exchange', async () => {
     const minted = row<{ token: string }>(
-      await db.as(alice, `select * from public.mint_qr_token(120)`),
+      await db.as(alice, `select * from public.mint_connect_token(120)`),
     );
     const before = Number(
       row<{ n: number }>(
@@ -254,7 +254,7 @@ describe('tapping someone you already know', () => {
     );
 
     const result = row<{ status: string; exchange_id: string | null }>(
-      await db.as(bob, `select * from public.open_qr_exchange($1)`, [minted.token]),
+      await db.as(bob, `select * from public.open_exchange($1, 'qr')`, [minted.token]),
     );
 
     assert.equal(result.status, 'already_connected');
@@ -270,12 +270,12 @@ describe('tapping someone you already know', () => {
 
   test('and the scanned code is left unspent', async () => {
     const minted = row<{ token: string }>(
-      await db.as(alice, `select * from public.mint_qr_token(120)`),
+      await db.as(alice, `select * from public.mint_connect_token(120)`),
     );
-    await db.as(bob, `select * from public.open_qr_exchange($1)`, [minted.token]);
+    await db.as(bob, `select * from public.open_exchange($1, 'qr')`, [minted.token]);
 
     const t = row<{ consumed_at: string | null }>(
-      await db.admin(`select consumed_at from public.qr_tokens where token = $1`, [
+      await db.admin(`select consumed_at from public.connect_tokens where token = $1`, [
         minted.token,
       ]),
     );
@@ -303,8 +303,11 @@ describe('tapping someone you already know', () => {
   });
 
   test('the same is true on the UWB path', async () => {
+    const minted = row<{ token: string }>(
+      await db.as(alice, `select * from public.mint_connect_token(120)`),
+    );
     const result = row<{ status: string; exchange_id: string | null }>(
-      await db.as(bob, `select * from public.open_uwb_exchange($1)`, [alice]),
+      await db.as(bob, `select * from public.open_exchange($1, 'uwb')`, [minted.token]),
     );
     assert.equal(result.status, 'already_connected');
     assert.equal(result.exchange_id, null);
@@ -313,10 +316,10 @@ describe('tapping someone you already know', () => {
   test('but a genuine stranger still opens normally', async () => {
     const sam = await db.createUser('sam', 'Sam', 'Stranger');
     const minted = row<{ token: string }>(
-      await db.as(sam, `select * from public.mint_qr_token(120)`),
+      await db.as(sam, `select * from public.mint_connect_token(120)`),
     );
     const result = row<{ status: string; exchange_id: string | null }>(
-      await db.as(bob, `select * from public.open_qr_exchange($1)`, [minted.token]),
+      await db.as(bob, `select * from public.open_exchange($1, 'qr')`, [minted.token]),
     );
 
     assert.equal(result.status, 'opened');

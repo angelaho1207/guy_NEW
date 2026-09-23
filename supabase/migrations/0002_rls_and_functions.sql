@@ -11,7 +11,7 @@
 
 alter table public.profiles             enable row level security;
 alter table public.profile_field_shares enable row level security;
-alter table public.qr_tokens            enable row level security;
+alter table public.connect_tokens       enable row level security;
 alter table public.exchanges            enable row level security;
 alter table public.connections          enable row level security;
 alter table public.connection_notes     enable row level security;
@@ -53,14 +53,14 @@ create policy field_shares_update_own on public.profile_field_shares
 -- Inserts happen through the seeding trigger only.
 
 -- ---------------------------------------------------------------------------
--- qr_tokens — you may mint and read your own; redeeming someone else's goes
--- through open_qr_exchange(), never a direct select.
+-- connect_tokens — you may mint and read your own; redeeming someone else's
+-- goes through open_exchange(), never a direct select.
 -- ---------------------------------------------------------------------------
 
-create policy qr_tokens_select_own on public.qr_tokens
+create policy connect_tokens_select_own on public.connect_tokens
   for select using (user_id = (select auth.uid()));
 
-create policy qr_tokens_insert_own on public.qr_tokens
+create policy connect_tokens_insert_own on public.connect_tokens
   for insert with check (user_id = (select auth.uid()));
 
 -- ---------------------------------------------------------------------------
@@ -331,12 +331,22 @@ select
 from public.connections c;
 
 -- ---------------------------------------------------------------------------
--- QR tokens
+-- Connect tokens
 -- ---------------------------------------------------------------------------
 
--- Regenerated every time the code screen is opened. Short lived and single
--- use, so a screenshot of a code is not a reusable identity.
-create or replace function public.mint_qr_token(p_ttl_seconds integer default 120)
+-- Mints the token that proves which account this phone belongs to.
+--
+-- Called when the connect screen opens, on either path: it becomes the QR
+-- code, or it is broadcast over Bluetooth during Nearby Interaction discovery.
+-- Minting retires this user's previous live token, so only what is currently
+-- on screen, or currently being broadcast, can be redeemed.
+--
+-- The UWB path broadcasts continuously while the screen is open, so a client
+-- that keeps that screen up past the TTL must re-mint. That is deliberate:
+-- a Bluetooth broadcast can be overheard at range, unlike a QR code that has
+-- to be pointed at, so its useful lifetime is kept short rather than stretched
+-- for convenience.
+create or replace function public.mint_connect_token(p_ttl_seconds integer default 120)
 returns table (token text, expires_at timestamptz)
 language plpgsql
 security definer
@@ -355,21 +365,19 @@ begin
     raise exception 'ttl out of range';
   end if;
 
-  -- Retire any still-live codes for this user, so only the code currently on
-  -- screen can be redeemed.
   -- Columns are qualified because this function's OUT parameters are named
   -- `token` and `expires_at`, which would otherwise shadow the columns.
-  update public.qr_tokens
+  update public.connect_tokens
      set expires_at = now()
-   where qr_tokens.user_id = v_uid
-     and qr_tokens.consumed_at is null
-     and qr_tokens.expires_at > now();
+   where connect_tokens.user_id = v_uid
+     and connect_tokens.consumed_at is null
+     and connect_tokens.expires_at > now();
 
   v_token := encode(gen_random_bytes(32), 'base64');
   v_token := replace(replace(replace(v_token, '+', '-'), '/', '_'), '=', '');
   v_exp   := now() + make_interval(secs => p_ttl_seconds);
 
-  insert into public.qr_tokens (token, user_id, expires_at)
+  insert into public.connect_tokens (token, user_id, expires_at)
   values (v_token, v_uid, v_exp);
 
   return query select v_token, v_exp;
@@ -380,15 +388,27 @@ $fn$;
 -- Exchanges
 -- ---------------------------------------------------------------------------
 
--- Scanning a code opens a handshake. It does not share anything: both people
--- still have to confirm in-app, inside the 30 second window.
+-- Opens a handshake, on either path.
+--
+-- Both paths redeem a connect token. Neither accepts an account id, so a
+-- client cannot name a person it is not standing next to: it has to present a
+-- token it could only have obtained by reading their screen or by being in
+-- Bluetooth range of their phone.
+--
+-- `p_method` only records how the two met, for the connection row and for the
+-- UI. It is not a trust input, and a client that misreports it gains nothing.
+--
+-- Opening shares nothing. Both people still confirm, inside the 30 second
+-- window, and only the second confirmation creates anything.
 --
 -- Returns ('already_connected', null) when these two already have each other,
--- so the app can show a plain "Already connected!" and stop. Nothing is
--- re-exchanged and no prompt is raised on either phone. The scanned code is
--- also left unspent, so a mistaken scan does not cost the other person their
--- live code.
-create or replace function public.open_qr_exchange(p_token text)
+-- so the app can show a plain "Already connected!" and stop. No prompt is
+-- raised on either phone, and the token is left unspent, so a mistaken scan or
+-- tap does not cost the other person their live token.
+create or replace function public.open_exchange(
+  p_token  text,
+  p_method public.exchange_method
+)
 returns table (status text, exchange_id uuid)
 language plpgsql
 security definer
@@ -404,15 +424,15 @@ begin
   end if;
 
   -- Locked, then consumed only if the exchange actually opens.
-  select q.user_id into v_owner
-  from public.qr_tokens q
-  where q.token = p_token
-    and q.consumed_at is null
-    and q.expires_at > now()
+  select t.user_id into v_owner
+  from public.connect_tokens t
+  where t.token = p_token
+    and t.consumed_at is null
+    and t.expires_at > now()
   for update;
 
   if v_owner is null then
-    raise exception 'qr code is expired or already used';
+    raise exception 'that connect code is expired or already used';
   end if;
 
   if v_owner = v_uid then
@@ -427,52 +447,12 @@ begin
     return;
   end if;
 
-  update public.qr_tokens q
+  update public.connect_tokens t
      set consumed_at = now(), consumed_by = v_uid
-   where q.token = p_token;
+   where t.token = p_token;
 
   insert into public.exchanges (method, initiator_id, responder_id, expires_at)
-  values ('qr', v_uid, v_owner, now() + interval '30 seconds')
-  returning id into v_id;
-
-  return query select 'opened'::text, v_id;
-end;
-$fn$;
-
--- The UWB path. The Swift module resolves the nearby peer to a user id and
--- calls this. See open question Q7 about authenticating that peer id.
-create or replace function public.open_uwb_exchange(p_other uuid)
-returns table (status text, exchange_id uuid)
-language plpgsql
-security definer
-set search_path = public
-as $fn$
-declare
-  v_uid uuid := auth.uid();
-  v_id  uuid;
-begin
-  if v_uid is null then
-    raise exception 'not authenticated';
-  end if;
-
-  if p_other is null or p_other = v_uid then
-    raise exception 'cannot exchange with yourself';
-  end if;
-
-  if not exists (select 1 from public.profiles where user_id = p_other) then
-    raise exception 'unknown peer';
-  end if;
-
-  if exists (
-    select 1 from public.connections c
-    where c.owner_id = v_uid and c.other_id = p_other
-  ) then
-    return query select 'already_connected'::text, null::uuid;
-    return;
-  end if;
-
-  insert into public.exchanges (method, initiator_id, responder_id, expires_at)
-  values ('uwb', v_uid, p_other, now() + interval '30 seconds')
+  values (p_method, v_uid, v_owner, now() + interval '30 seconds')
   returning id into v_id;
 
   return query select 'opened'::text, v_id;
@@ -976,7 +956,7 @@ grant update (
 grant select on public.profile_field_shares to authenticated;
 grant update (shareable, updated_at) on public.profile_field_shares to authenticated;
 
-grant select, insert on public.qr_tokens to authenticated;
+grant select, insert on public.connect_tokens to authenticated;
 grant select         on public.exchanges to authenticated;
 
 grant select, delete on public.connections to authenticated;
@@ -1008,9 +988,8 @@ revoke all on function public.display_name_for(uuid, uuid) from public;
 
 grant execute on function public.project_shared_profile(uuid) to authenticated;
 grant execute on function public.shareable_fields(uuid) to authenticated;
-grant execute on function public.mint_qr_token(integer) to authenticated;
-grant execute on function public.open_qr_exchange(text) to authenticated;
-grant execute on function public.open_uwb_exchange(uuid) to authenticated;
+grant execute on function public.mint_connect_token(integer) to authenticated;
+grant execute on function public.open_exchange(text, public.exchange_method) to authenticated;
 grant execute on function public.confirm_exchange(uuid) to authenticated;
 grant execute on function public.decline_exchange(uuid) to authenticated;
 grant execute on function public.set_reminder(uuid, integer, integer) to authenticated;
