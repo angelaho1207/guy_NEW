@@ -14,11 +14,11 @@ way.
 
 | | Status |
 |---|---|
-| Schema, RLS, consent projection | Done, 106 tests against real Postgres |
+| Schema, RLS, consent projection | Done, 109 tests against real Postgres |
 | Exchange handshake, QR tokens | Done, server side |
 | Reminders, 1:1 windows, scheduled jobs | Done, server side |
-| Shared domain logic and design tokens | Done, 68 tests |
-| Next.js web app | Not started |
+| Shared domain logic and design tokens | Done, 82 tests |
+| Next.js web app | Runs, minus sign-up and the camera scanner |
 | React Native app | Not started |
 | Swift Nearby Interaction module | **Blocked on the spike below** |
 
@@ -39,7 +39,9 @@ the tap path works end to end.
 ```
 supabase/migrations/   Schema, RLS, the functions that cross privacy boundaries
 supabase/tests/        Those migrations, run against a real in-process Postgres
+supabase/dev/          The two things PGlite needs shimmed to stand in for Supabase
 packages/shared/       Field registry, handle links, reminder and 1:1 rules, tokens
+apps/web/              Next.js app. Runs against the real schema, no setup
 ios-spike/             Throwaway harness for the Nearby Interaction question
 docs/                  Open questions, the spike, decisions, setup
 ```
@@ -48,8 +50,15 @@ docs/                  Open questions, the spike, decisions, setup
 
 ```
 npm install
-npm test
+npm run dev     # the web app, at http://localhost:3000
+npm test        # everything
 ```
+
+`npm run dev` needs nothing else: no Supabase account, no environment
+variables, no Docker. The dev server runs the real migrations against a
+Postgres compiled to WebAssembly, seeded with a handful of people who have
+already met each other. See [`apps/web/README.md`](apps/web/README.md) for
+what to try first.
 
 No Docker, no running database. The database tests boot Postgres in-process
 via PGlite and run every assertion as a non-superuser, so row level security is

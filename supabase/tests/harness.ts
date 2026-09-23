@@ -22,42 +22,9 @@ import { fileURLToPath } from 'node:url';
 const here = dirname(fileURLToPath(import.meta.url));
 const migrationsDir = join(here, '..', 'migrations');
 
-// Supabase provides these; PGlite does not.
-const AUTH_SHIM = `
-  create schema if not exists auth;
-
-  create table if not exists auth.users (
-    id                 uuid primary key default gen_random_uuid(),
-    email              text,
-    raw_user_meta_data jsonb not null default '{}'::jsonb,
-    created_at         timestamptz not null default now()
-  );
-
-  -- Stands in for Supabase's JWT-backed auth.uid().
-  create or replace function auth.uid() returns uuid
-  language sql stable as $shim$
-    select nullif(current_setting('guy.test_uid', true), '')::uuid;
-  $shim$;
-
-  create role authenticated nologin;
-  grant usage on schema auth to authenticated;
-
-  -- pg_cron stand-in. Records the schedule so a test can assert the jobs were
-  -- registered, without actually running anything.
-  create schema if not exists cron;
-  create table if not exists cron.job (
-    jobid   bigserial primary key,
-    jobname text,
-    schedule text,
-    command text
-  );
-  create or replace function cron.schedule(p_name text, p_schedule text, p_command text)
-  returns bigint language sql as $shim$
-    insert into cron.job (jobname, schedule, command)
-    values (p_name, p_schedule, p_command)
-    returning jobid;
-  $shim$;
-`;
+// Supabase provides these; PGlite does not. Shared with the web app's dev
+// server so there is one copy of the shim rather than two.
+const AUTH_SHIM = readFileSync(join(here, '..', 'dev', 'pglite-shim.sql'), 'utf8');
 
 export type Db = {
   /** Run SQL as the database superuser, bypassing RLS. Setup only. */

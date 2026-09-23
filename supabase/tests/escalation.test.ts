@@ -377,6 +377,39 @@ describe('reaching someone you are not standing next to', () => {
   });
 });
 
+describe('asking what someone else can see', () => {
+  test('a client cannot pass a viewer other than itself', async () => {
+    // display_name_for() takes the viewer as an argument because the scheduled
+    // jobs queue pushes on someone else's behalf. Handing that to a client
+    // would let it probe whether two other people are connected.
+    const err = await db.asExpectingFailure(
+      bob,
+      `select public.display_name_for($1, $2)`,
+      [alice, alice],
+    );
+    assert.match(err, /permission denied/i);
+  });
+
+  test('the wrapper pins the viewer to the caller', async () => {
+    const r = row<{ name_for: string }>(
+      await db.as(bob, `select public.name_for($1)`, [alice]),
+    );
+    assert.equal(r.name_for, 'Alice Alvarez');
+  });
+
+  test('and returns the username for someone you have not met', async () => {
+    const stranger = await db.createUser('stranger2', 'Sam', 'Stranger');
+    const r = row<{ name_for: string }>(
+      await db.as(bob, `select public.name_for($1)`, [stranger]),
+    );
+    assert.equal(
+      r.name_for,
+      'stranger2',
+      'no connection means no claim on their name',
+    );
+  });
+});
+
 describe('reading other people directly', () => {
   test('the raw profile table yields nothing for another user', async () => {
     const seen = rows(

@@ -320,6 +320,10 @@ as
 select
   c.id            as connection_id,
   c.other_id,
+  -- Identity, not profile content, and not a shareable field. Notifications
+  -- already fall back to it when a name is withheld (display_name_for), so the
+  -- UI needs it for the same reason: to have something to call someone.
+  (select p.username from public.profiles p where p.user_id = c.other_id) as username,
   c.met_via,
   c.fields_at_exchange,
   c.how_we_met,
@@ -916,6 +920,23 @@ begin
 end;
 $fn$;
 
+-- What the CALLER may see `p_subject` called.
+--
+-- display_name_for() takes the viewer as an argument, which is right for the
+-- scheduled jobs that queue a push on someone else's behalf, but wrong to hand
+-- to a client: passing someone else as the viewer would reveal whether those
+-- two are connected, and what one calls the other. This wrapper pins the
+-- viewer to auth.uid(), and it is the only one of the pair clients may call.
+create or replace function public.name_for(p_subject uuid)
+returns text
+language sql
+stable
+security definer
+set search_path = public
+as $fn$
+  select public.display_name_for(p_subject, auth.uid());
+$fn$;
+
 -- ---------------------------------------------------------------------------
 -- Grants
 -- ---------------------------------------------------------------------------
@@ -988,6 +1009,7 @@ revoke all on function public.display_name_for(uuid, uuid) from public;
 
 grant execute on function public.project_shared_profile(uuid) to authenticated;
 grant execute on function public.shareable_fields(uuid) to authenticated;
+grant execute on function public.name_for(uuid) to authenticated;
 grant execute on function public.mint_connect_token(integer) to authenticated;
 grant execute on function public.open_exchange(text, public.exchange_method) to authenticated;
 grant execute on function public.confirm_exchange(uuid) to authenticated;

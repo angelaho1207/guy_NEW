@@ -82,8 +82,24 @@ there is no build step and no test framework dependency.
   function that accepts a user id to start an exchange, that is the bug D11
   exists to prevent.
 
+## The web app
+
+`npm run dev` runs it with no setup. The dev server applies the real migrations
+to an in-process Postgres and seeds it through the real functions, so the
+screens are talking to the shipped SQL with RLS enforced. See D12 and
+`apps/web/README.md`.
+
+`asUser` and `asAdmin` in `apps/web/lib/db.ts` are the only two functions that
+touch the database. Keep it that way: that pair is what gets swapped for a
+Supabase client, and anything that reaches around them will not survive the
+swap.
+
+The palette lives in `packages/shared/src/theme.ts` and again as CSS custom
+properties in `apps/web/app/globals.css`. A test fails if they drift. Use the
+tokens, never a literal colour.
+
 ## What is not built yet
 
-The Next.js web app, the React Native app and the Swift Nearby Interaction
-module. The tap flow is blocked on the spike in `docs/02-uwb-spike.md`, which
-needs two physical iPhones and has not been run.
+Sign up and log in, the web QR scanner, the React Native app, and the Swift
+Nearby Interaction module. The tap flow is blocked on the spike in
+`docs/02-uwb-spike.md`, which needs two physical iPhones and has not been run.

@@ -313,6 +313,51 @@ trip on a path that already required the network.
 
 ---
 
+## D12 — The web app's dev server runs the real database, not a mock
+
+`npm run dev` needs no Supabase account, no environment variables and no
+Docker. The dev server boots PGlite, applies the real migrations from
+`supabase/migrations`, and seeds a handful of people by minting connect tokens
+and confirming exchanges from both sides.
+
+**Chosen** because the alternative was worse in both directions. Requiring a
+Supabase project before you can look at anything puts twenty minutes and
+several ways to get stuck between a change and seeing it. Mocking the data
+instead would have meant the screens demonstrated the mock rather than the
+product: the whole question worth asking of this UI is whether the consent
+rules read correctly, and a mock cannot answer that.
+
+Running the shipped SQL means a withheld field is missing from a card because
+the database declined to send it, which is the only version of that worth
+looking at.
+
+**Costs, all real:**
+
+- The database is in memory, so every restart is a fresh one. Nothing typed in
+  the demo survives. Acceptable while the app is being looked at rather than
+  used.
+- Two shims, in `supabase/dev/pglite-shim.sql`, shared with the test harness so
+  there is one copy: `auth.uid()` reads a session variable, and
+  `cron.schedule()` records rather than runs.
+- There is no login. The current user sits in a cookie with a switcher in the
+  header. That is also how you check the thing most worth checking, which is
+  what a connection looks like from the other side.
+- PGlite is one connection, so queries are serialised through a small queue.
+  Fine for one person looking at a demo, wrong for anything else.
+
+The swap is contained: `asUser` and `asAdmin` in `apps/web/lib/db.ts` are the
+only two functions that touch the database. Everything above them is already
+the SQL that ships.
+
+**One thing this cost an hour of:** booting Postgres inside a request blocks
+while Next is already streaming a response, and fails with an error about
+ArrayBuffers that has nothing to do with databases. The boot belongs in
+`instrumentation.ts`, which runs once at startup. That file gets compiled for
+the edge runtime too, where `node:fs` does not resolve, which is why
+`next.config.mjs` marks those modules external for that build.
+
+---
+
 ## D8 — Built bottom-up, and the apps are not scaffolded yet
 
 The brief asks for incremental work, each piece solid before the next, rather
