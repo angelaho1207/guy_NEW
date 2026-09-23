@@ -1,34 +1,26 @@
-import QRCode from 'qrcode';
-import { asUser, asAdmin } from '@/lib/db';
+import { asUser } from '@/lib/db';
 import { currentUser } from '@/lib/session';
-import { mintToken } from '@/app/actions';
 import { ScanBox } from '@/components/ScanBox';
 import { ConfirmPrompt } from '@/components/ConfirmPrompt';
+import { CodePanel } from '@/components/CodePanel';
+import { PendingWatcher } from '@/components/PendingWatcher';
+import { toInstantValue } from '@/lib/dates';
 
 export const dynamic = 'force-dynamic';
 
 type Pending = {
   id: string;
-  expires_at: string;
+  expires_at: Date;
   you_confirmed: boolean;
-  peer_first: string;
-  peer_last: string;
-  peer_username: string;
+  peer_name: string;
 };
 
 export default async function ConnectPage() {
   const me = await currentUser();
 
-  // Opening this screen mints a fresh code and retires the previous one, which
-  // is the whole point: a screenshot of an old code is worthless.
-  const token = await mintToken();
-  const svg = await QRCode.toString(token.token, {
-    type: 'svg',
-    margin: 0,
-    width: 200,
-    color: { dark: '#0B0B0D', light: '#F2F1EE' },
-  });
-
+  // name_for() pins the viewer to the caller, so this shows what you are
+  // allowed to call them and nothing more. A prompt that cannot say who it is
+  // from is not a prompt, and one that leaks a withheld name is worse.
   const pending = await asUser<Pending>(
     me.user_id,
     `select
@@ -36,35 +28,19 @@ export default async function ConnectPage() {
        e.expires_at,
        case when e.initiator_id = $1 then e.initiator_confirmed_at is not null
             else e.responder_confirmed_at is not null end as you_confirmed,
-       p.first_name as peer_first,
-       p.last_name  as peer_last,
-       p.username   as peer_username
+       public.exchange_peer_name(e.id) as peer_name
      from public.exchanges e
-     join public.profiles p
-       on p.user_id = case when e.initiator_id = $1 then e.responder_id
-                           else e.initiator_id end
      where e.state = 'pending'
+       and e.expires_at > now()
        and (e.initiator_id = $1 or e.responder_id = $1)
      order by e.created_at desc`,
     [me.user_id],
   );
 
-  // The profile row is not readable across users, so the peer's name comes
-  // from a superuser read here. On a phone it comes from the confirmation
-  // payload. Either way it is only a name, and only for someone raising a
-  // prompt on your screen.
-  const named = await Promise.all(
-    pending.map(async (p) => {
-      const [row] = await asAdmin<{ first_name: string; last_name: string }>(
-        `select first_name, last_name from public.profiles where username = $1`,
-        [p.peer_username],
-      );
-      return { ...p, display: `${row.first_name} ${row.last_name}` };
-    }),
-  );
-
   return (
     <>
+      <PendingWatcher />
+
       <h1>Connect</h1>
       <p className="lede">
         Show your code, or scan theirs. Either way both of you confirm before
@@ -72,15 +48,15 @@ export default async function ConnectPage() {
         from now.
       </p>
 
-      {named.length > 0 && (
+      {pending.length > 0 && (
         <>
           <h2>Waiting on you</h2>
-          {named.map((p) => (
+          {pending.map((p) => (
             <ConfirmPrompt
               key={p.id}
               exchangeId={p.id}
-              peerName={p.display}
-              expiresAt={p.expires_at}
+              peerName={p.peer_name}
+              expiresAt={toInstantValue(p.expires_at)}
               youConfirmed={p.you_confirmed}
             />
           ))}
@@ -88,23 +64,7 @@ export default async function ConnectPage() {
       )}
 
       <h2>Your code</h2>
-      <div className="card">
-        <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', alignItems: 'center' }}>
-          <div className="qr" dangerouslySetInnerHTML={{ __html: svg }} />
-          <div style={{ flex: 1, minWidth: 220 }}>
-            <p className="tiny" style={{ marginTop: 0 }}>
-              Good for two minutes, and only once. Opening this screen again
-              makes a new one and kills this one.
-            </p>
-            <p className="field-label">Paste this into the other browser</p>
-            <input type="text" readOnly value={token.token} />
-            <p className="tiny">
-              On a phone nobody sees this string. It is here so you can walk
-              through both sides of the flow yourself.
-            </p>
-          </div>
-        </div>
-      </div>
+      <CodePanel />
 
       <h2>Their code</h2>
       <ScanBox />

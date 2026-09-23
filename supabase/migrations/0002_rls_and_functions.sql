@@ -937,6 +937,61 @@ as $fn$
   select public.display_name_for(p_subject, auth.uid());
 $fn$;
 
+-- The name to put on a confirmation prompt.
+--
+-- name_for() falls back to a username when the caller has no connection to the
+-- subject, and during an exchange there deliberately is not one yet. But the
+-- prompt is the consent moment: "Share with alice?" is a worse question than
+-- "Share with Alice Alvarez?", and answering it well depends on knowing who is
+-- asking.
+--
+-- Only a party to the exchange may ask, and the answer still respects the other
+-- person's toggles: a withheld name falls back to their username, the same as
+-- everywhere else.
+create or replace function public.exchange_peer_name(p_exchange_id uuid)
+returns text
+language plpgsql
+stable
+security definer
+set search_path = public
+as $fn$
+declare
+  v_uid  uuid := auth.uid();
+  v_peer uuid;
+  v_name text;
+begin
+  select case when e.initiator_id = v_uid then e.responder_id else e.initiator_id end
+    into v_peer
+  from public.exchanges e
+  where e.id = p_exchange_id
+    and v_uid in (e.initiator_id, e.responder_id);
+
+  if v_peer is null then
+    raise exception 'not a party to this exchange' using errcode = '42501';
+  end if;
+
+  select nullif(btrim(concat_ws(' ', p.first_name, p.last_name)), '')
+    into v_name
+  from public.profiles p
+  where p.user_id = v_peer
+    and exists (
+      select 1 from public.profile_field_shares s
+      where s.user_id = v_peer and s.field = 'first_name' and s.shareable
+    )
+    and exists (
+      select 1 from public.profile_field_shares s
+      where s.user_id = v_peer and s.field = 'last_name' and s.shareable
+    );
+
+  if v_name is not null then
+    return v_name;
+  end if;
+
+  select username into v_name from public.profiles where user_id = v_peer;
+  return coalesce(v_name, 'someone');
+end;
+$fn$;
+
 -- ---------------------------------------------------------------------------
 -- Grants
 -- ---------------------------------------------------------------------------
@@ -1010,6 +1065,7 @@ revoke all on function public.display_name_for(uuid, uuid) from public;
 grant execute on function public.project_shared_profile(uuid) to authenticated;
 grant execute on function public.shareable_fields(uuid) to authenticated;
 grant execute on function public.name_for(uuid) to authenticated;
+grant execute on function public.exchange_peer_name(uuid) to authenticated;
 grant execute on function public.mint_connect_token(integer) to authenticated;
 grant execute on function public.open_exchange(text, public.exchange_method) to authenticated;
 grant execute on function public.confirm_exchange(uuid) to authenticated;

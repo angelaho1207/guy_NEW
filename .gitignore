@@ -16,3 +16,4 @@ android/
 xcuserdata/
 .vercel
 coverage/
+*.tsbuildinfo

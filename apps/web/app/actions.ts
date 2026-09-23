@@ -3,9 +3,11 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { cookies } from 'next/headers';
+import QRCode from 'qrcode';
 import { asUser } from '@/lib/db';
 import { currentUser, SESSION_COOKIE } from '@/lib/session';
 import { PROFILE_FIELDS } from '@guy/shared';
+import { toInstantValue } from '@/lib/dates';
 
 /**
  * Every mutation the web app can make.
@@ -288,14 +290,30 @@ export async function acceptTime(_prev: unknown, formData: FormData) {
 
 // --- Connect ---------------------------------------------------------------
 
-/** Mints a fresh connect token, exactly as opening the code screen would. */
+/**
+ * Mints a fresh connect token and renders it as a QR code.
+ *
+ * Called by the code panel on mount and again before the token expires, not by
+ * the page on every render. That distinction matters: minting retires the
+ * previous token, so a page that minted while rendering would invalidate the
+ * code on screen every time anything else caused a re-render.
+ */
 export async function mintToken() {
   const me = await currentUser();
-  const rows = await asUser<{ token: string; expires_at: string }>(
+  const rows = await asUser<{ token: string; expires_at: Date }>(
     me.user_id,
     `select * from public.mint_connect_token(120)`,
   );
-  return rows[0];
+  const { token, expires_at } = rows[0];
+
+  const svg = await QRCode.toString(token, {
+    type: 'svg',
+    margin: 0,
+    width: 200,
+    color: { dark: '#0B0B0D', light: '#F2F1EE' },
+  });
+
+  return { token, expiresAt: toInstantValue(expires_at), svg };
 }
 
 /**
@@ -319,6 +337,10 @@ export async function redeemToken(_prev: unknown, formData: FormData) {
     );
     const { status, exchange_id } = rows[0];
 
+    // The confirmation prompt is rendered by the page from its own query, so
+    // it only appears once the page is told to render again.
+    revalidatePath('/connect');
+
     if (status === 'already_connected') {
       return { alreadyConnected: true as const };
     }
@@ -339,6 +361,7 @@ export async function confirmExchange(_prev: unknown, formData: FormData) {
       [id],
     );
     revalidatePath('/contacts');
+    revalidatePath('/connect');
     return { state: rows[0].confirm_exchange };
   } catch (err) {
     return { error: message(err) };
@@ -349,4 +372,5 @@ export async function declineExchange(formData: FormData) {
   const me = await currentUser();
   const id = String(formData.get('exchange_id'));
   await asUser(me.user_id, `select public.decline_exchange($1)`, [id]);
+  revalidatePath('/connect');
 }
