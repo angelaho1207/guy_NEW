@@ -71,6 +71,34 @@ if you get past that.
 **Decline a 1:1.** As Angela, decline the request from Noor. It disappears for
 both of you, with no notification and nothing left saying "declined".
 
+## Deploying this
+
+It builds and runs on Vercel, and you should know what you are getting.
+
+The database is the in-memory one described above. On Vercel that means **one
+database per serverless instance**, created on that instance's first request
+and gone when it recycles. So:
+
+- Anything saved can disappear a minute later.
+- Two people looking at the same link can see different data.
+- The first request to each instance waits about three seconds for the
+  database to boot.
+
+That is fine for showing someone the design. It is not a working app, and
+nobody should put real information into it. The fix is not a deployment
+setting, it is wiring up Supabase.
+
+Two things had to be true for the build to work at all, both easy to undo by
+accident:
+
+- `@electric-sql/pglite` is a **dependency** of this package, not a
+  devDependency of the repo root. It is the app's database layer at runtime,
+  not a build tool.
+- The migrations are **imported**, not read from disk. A deployed bundle only
+  contains files the build traced through imports, and `supabase/` sits
+  outside this app. A test fails if a migration is added without being
+  imported here.
+
 ## Swapping in a real Supabase project
 
 The app talks to the database through `asUser` and `asAdmin` in `lib/db.ts`,

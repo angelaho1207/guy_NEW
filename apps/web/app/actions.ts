@@ -1,8 +1,9 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { redirect } from 'next/navigation';
 import { cookies } from 'next/headers';
-import { asUser, asAdmin } from '@/lib/db';
+import { asUser } from '@/lib/db';
 import { currentUser, SESSION_COOKIE } from '@/lib/session';
 import { PROFILE_FIELDS } from '@guy/shared';
 
@@ -30,7 +31,7 @@ export async function switchUser(formData: FormData) {
 
 // --- Profile ---------------------------------------------------------------
 
-export async function saveProfile(formData: FormData) {
+export async function saveProfile(_prev: unknown, formData: FormData) {
   const me = await currentUser();
 
   const columns = PROFILE_FIELDS.map((f) => f.key);
@@ -202,18 +203,30 @@ export async function completeFollowUp(formData: FormData) {
 
 // --- 1:1 -------------------------------------------------------------------
 
+/**
+ * Sends the request and goes straight to the thread.
+ *
+ * No error object comes back, because this is used as a plain form action and
+ * those must return nothing. The realistic failure is the unique index that
+ * allows only one live request per pair, and the button is hidden when one
+ * already exists, so reaching it means something is genuinely wrong and an
+ * error boundary is the honest response.
+ */
 export async function requestOneOnOne(formData: FormData) {
   const me = await currentUser();
   const id = String(formData.get('connection_id'));
 
-  try {
-    await asUser(me.user_id, `select public.request_one_on_one($1)`, [id]);
-  } catch (err) {
-    return { error: message(err) };
-  }
+  const rows = await asUser<{ id: string }>(
+    me.user_id,
+    `select * from public.request_one_on_one($1)`,
+    [id],
+  );
 
   revalidatePath('/one-on-ones');
   revalidatePath(`/contacts/${id}`);
+
+  // redirect() signals by throwing, so it stays outside any try/catch.
+  redirect(`/one-on-ones/${rows[0].id}`);
 }
 
 export async function respondOneOnOne(formData: FormData) {
@@ -333,19 +346,4 @@ export async function declineExchange(formData: FormData) {
   const me = await currentUser();
   const id = String(formData.get('exchange_id'));
   await asUser(me.user_id, `select public.decline_exchange($1)`, [id]);
-}
-
-/** Who the other party is, so the confirmation prompt can name them. */
-export async function exchangePeer(exchangeId: string) {
-  const me = await currentUser();
-  const rows = await asAdmin<{ first_name: string; last_name: string; username: string }>(
-    `select p.first_name, p.last_name, p.username
-       from public.exchanges e
-       join public.profiles p
-         on p.user_id = case when e.initiator_id = $2 then e.responder_id
-                             else e.initiator_id end
-      where e.id = $1`,
-    [exchangeId, me.user_id],
-  );
-  return rows[0] ?? null;
 }

@@ -3,9 +3,22 @@ import 'server-only';
 import { PGlite } from '@electric-sql/pglite';
 import { citext } from '@electric-sql/pglite/contrib/citext';
 import { pgcrypto } from '@electric-sql/pglite/contrib/pgcrypto';
-import { readFileSync, readdirSync } from 'node:fs';
-import { join } from 'node:path';
 import { seed } from './seed';
+
+// Imported, not read from disk. See the note in next.config.mjs: files reached
+// only through fs do not travel into a deployed bundle. A test asserts this
+// list covers every migration, so adding one and forgetting it here fails
+// loudly rather than silently running an old schema.
+import shim from '../../../supabase/dev/pglite-shim.sql';
+import m0001 from '../../../supabase/migrations/0001_init.sql';
+import m0002 from '../../../supabase/migrations/0002_rls_and_functions.sql';
+import m0003 from '../../../supabase/migrations/0003_scheduled_jobs.sql';
+
+const MIGRATIONS: [string, string][] = [
+  ['0001_init.sql', m0001],
+  ['0002_rls_and_functions.sql', m0002],
+  ['0003_scheduled_jobs.sql', m0003],
+];
 
 /**
  * The dev database.
@@ -26,30 +39,21 @@ import { seed } from './seed';
  * a real Supabase project.
  */
 
-const repoRoot = join(process.cwd(), '..', '..');
-const migrationsDir = join(repoRoot, 'supabase', 'migrations');
-const shimPath = join(repoRoot, 'supabase', 'dev', 'pglite-shim.sql');
-
 let bootPromise: Promise<PGlite> | null = null;
 
 async function boot(): Promise<PGlite> {
   const pg = await PGlite.create({ extensions: { citext, pgcrypto } });
 
-  await pg.exec(readFileSync(shimPath, 'utf8'));
+  await pg.exec(shim);
 
-  const files = readdirSync(migrationsDir)
-    .filter((f) => f.endsWith('.sql'))
-    .sort();
-
-  for (const file of files) {
-    const sql = readFileSync(join(migrationsDir, file), 'utf8')
-      // pg_cron cannot load in WASM. The job functions are still created and
-      // can be called by hand; only the scheduling is inert.
-      .replace(/create extension if not exists pg_cron;/g, '');
+  for (const [name, source] of MIGRATIONS) {
+    // pg_cron cannot load in WASM. The job functions are still created and can
+    // be called by hand; only the scheduling is inert.
+    const sql = source.replace(/create extension if not exists pg_cron;/g, '');
     try {
       await pg.exec(sql);
     } catch (err) {
-      throw new Error(`migration ${file} failed: ${(err as Error).message}`);
+      throw new Error(`migration ${name} failed: ${(err as Error).message}`);
     }
   }
 
