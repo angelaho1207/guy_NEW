@@ -43,7 +43,7 @@ supabase/dev/          The two things PGlite needs shimmed to stand in for Supab
 packages/shared/       Field registry, handle links, reminder and 1:1 rules, tokens
 apps/web/              Next.js app. Runs against the real schema, no setup
 ios-spike/             Throwaway harness for the Nearby Interaction question
-docs/                  Open questions, the spike, decisions, setup
+docs/                  Open questions, the spike, decisions, setup, the v2 brief
 ```
 
 ## Getting started

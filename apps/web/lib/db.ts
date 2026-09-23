@@ -13,11 +13,15 @@ import shim from '../../../supabase/dev/pglite-shim.sql';
 import m0001 from '../../../supabase/migrations/0001_init.sql';
 import m0002 from '../../../supabase/migrations/0002_rls_and_functions.sql';
 import m0003 from '../../../supabase/migrations/0003_scheduled_jobs.sql';
+import m0004 from '../../../supabase/migrations/0004_exchange_method_nearby.sql';
+import m0005 from '../../../supabase/migrations/0005_presence.sql';
 
 const MIGRATIONS: [string, string][] = [
   ['0001_init.sql', m0001],
   ['0002_rls_and_functions.sql', m0002],
   ['0003_scheduled_jobs.sql', m0003],
+  ['0004_exchange_method_nearby.sql', m0004],
+  ['0005_presence.sql', m0005],
 ];
 
 /**

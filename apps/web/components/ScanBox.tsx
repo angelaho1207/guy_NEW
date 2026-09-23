@@ -49,8 +49,9 @@ export function ScanBox() {
 
       {state && 'exchangeId' in state && state.exchangeId && (
         <div className="banner" style={{ marginBottom: 0 }}>
-          Exchange opened. Confirm it below, then switch to the other person and
-          confirm on their side too. Nothing is shared until both of you do.
+          Exchange opened. Confirm it under &ldquo;Waiting on you&rdquo; at the
+          top of this page, then switch to the other person and confirm on
+          their side too. Nothing is shared until both of you do.
         </div>
       )}
     </div>
