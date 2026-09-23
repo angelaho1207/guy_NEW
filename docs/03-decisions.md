@@ -65,23 +65,52 @@ will fail confusingly otherwise. See `docs/04-setup.md`.
 
 ---
 
-## D3 — A connection freezes which fields, not what is in them
+## D3 — Visibility is the subject's current toggle, and nothing else
 
-`connections.shared_fields` is a frozen array of field keys. The values behind
-those keys are read live from the other person's profile at query time.
+One thing decides whether you can see a field of someone's profile: whether
+they have its shareable toggle on **right now**.
 
-This is the brief read literally: "a copy of whichever of the other person's
-fields were shareable at the moment of the exchange", which "live-updates" when
-they edit their profile.
+Turning it off hides the field from everyone, immediately, including people who
+have been looking at it for months. Turning it on reveals it to everyone,
+immediately, including people they met while it was off. There is no
+per-connection field set, no grandfathering and no ceiling.
 
-It has a consequence I do not think the brief intends, which is **Q1** in
-`01-open-questions.md` and the thing I would most like answered. In short:
-turning a shareable toggle off does nothing to connections that already exist.
-I implemented the literal reading, but I recommend the other one.
+The exchange decides *whether you are connected at all*. It does not decide
+which fields you get.
 
-The switch is deliberately one place. `project_shared_profile()` would
-intersect its `p_fields` argument with a lookup against
-`profile_field_shares`, and nothing else changes.
+This is the third version of this rule, and the history is worth keeping
+because each step removed a trap:
+
+1. **The brief, read literally.** The set of fields froze at the exchange and
+   values stayed live. Revoking a field did nothing to existing connections,
+   so revoking and then editing pushed the new value to everyone who already
+   had it. The opposite of what a consent toggle should do.
+2. **Frozen set intersected with current toggles.** Revocation worked, but the
+   frozen set still acted as a ceiling, so turning a field back on reached new
+   contacts and not old ones. Two people looking at the same profile saw
+   different things for reasons neither could see or explain.
+3. **Current toggles alone.** What is implemented. One rule, one place, and
+   the toggle means exactly what it says on the screen.
+
+`connections.fields_at_exchange` survives as a **historical record** of what
+was being shared the day two people met. It is deliberately not consulted by
+anything that decides access, and the column comment says so, because a column
+that looks like a permission but is not would be the worst kind of trap. If it
+earns nothing, delete it.
+
+Falling out of this: `public.project_shared_profile()` no longer takes a field
+list. An earlier version did, which meant a client calling it directly could
+name a set of its own choosing and the function had to defend itself against
+its own caller. With visibility driven entirely by the subject's toggles, the
+argument has no reason to exist and that whole class of problem goes with it.
+All that remains is checking the caller is connected at all.
+
+A field that is not shared reads as **absent**, never as `-`. The empty marker
+means "shared but blank", and conflating the two would make revocation look
+like an empty profile.
+
+`public.display_name_for()` applies the same test, so a push notification can
+never carry a name the recipient may no longer see.
 
 ---
 
@@ -190,12 +219,60 @@ The duration is a guess, which is Q8. Everything else here follows the brief.
 
 ---
 
+## D9 — Two required fields, and Discord's id rides with its username
+
+**First and last name are the only required profile content.** They are
+collected at signup, because a profile cannot exist without them, and they are
+enforced by `NOT NULL` plus a non-blank check rather than by client validation.
+
+Required is about completeness, not about sharing. Both remain ordinary
+shareable fields and can be withheld or revoked like any other, in which case
+notifications fall back to the username. `fullName()` in the shared package
+returns null unless both halves are present, so nothing ever renders as
+"Alice -".
+
+**Discord stores a username and a numeric id, under one toggle.** The username
+is what people recognise and what shows on screen; the id is the only thing
+that can be turned into a link. Giving the id its own toggle would let someone
+share a username while withholding the thing that makes it useful, which is a
+setting with no meaning, so `discord_id` is not in the `profile_field` enum at
+all. The projection emits it alongside `discord`, and withholding Discord
+withholds both.
+
+The id is checked against a 15 to 25 digit pattern in the database, so a
+username typed into the id box is rejected rather than turned into a link that
+goes nowhere.
+
+---
+
+## D10 — Deleting an account deletes the other person's notes about you
+
+When someone deletes their account, the cascade runs all the way through:
+profile, then both connection rows, then the notes the *other* person wrote
+about them.
+
+This was flagged as a probable data-loss bug, because those notes are the other
+person's own writing about their own life, and everything else in this schema
+treats notes as belonging to their author. Deleting my account arguably should
+not delete your diary.
+
+**Chosen anyway, explicitly, for v1**, with the trade understood. The
+alternative is a tombstone: keep the connection row, blank the profile, show
+the contact as a username or "deleted account", and leave the notes standing.
+That is more code and more states to render, and it keeps data about someone
+who asked to be forgotten.
+
+The cascade is now a decision rather than an accident. Revisit it the first
+time someone loses notes they cared about.
+
+---
+
 ## D8 — Built bottom-up, and the apps are not scaffolded yet
 
 The brief asks for incremental work, each piece solid before the next, rather
 than broad and shallow.
 
-What exists is the data layer and the domain rules, with 114 tests. What does
+What exists is the data layer and the domain rules, with 152 tests. What does
 not exist is the Next.js app, the React Native app, and the native module.
 
 That ordering was chosen because the consent model is the part where a bug is a

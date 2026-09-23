@@ -9,6 +9,9 @@ import {
   GROUP_ORDER,
   fieldsInGroup,
   labelFor,
+  isRequired,
+  fullName,
+  REQUIRED_FIELDS,
   TALK_PLACEHOLDERS,
 } from '../src/fields.ts';
 
@@ -71,4 +74,37 @@ describe('the field registry', () => {
       );
     }
   });
+
+  test('first and last name are the only required fields', () => {
+    const required = PROFILE_FIELDS.filter((f) => isRequired(f.key)).map((f) => f.key);
+    assert.deepEqual(required, ['first_name', 'last_name']);
+  });
+
+  test('a required field is still an ordinary shareable field', () => {
+    // Required means "must be filled in", not "must be shared". Nothing in the
+    // registry marks these as unshareable, and nothing should.
+    for (const key of REQUIRED_FIELDS) {
+      assert.ok(FIELD_KEYS.includes(key), `${key} must be a normal profile field`);
+    }
+  });
+});
+
+describe('full name', () => {
+  test('joins both parts', () => {
+    assert.equal(fullName({ first_name: 'Alice', last_name: 'Alvarez' }), 'Alice Alvarez');
+  });
+
+  test('is null when either part was withheld', () => {
+    assert.equal(fullName({ first_name: 'Alice' }), null);
+    assert.equal(fullName({ last_name: 'Alvarez' }), null);
+    assert.equal(fullName({}), null);
+  });
+
+  test('is null when either part came back as the empty marker', () => {
+    // "-" means the field is shared but blank. Rendering "Alice -" as someone's
+    // name would be worse than falling back to their username.
+    assert.equal(fullName({ first_name: 'Alice', last_name: '-' }), null);
+    assert.equal(fullName({ first_name: '-', last_name: 'Alvarez' }), null);
+  });
+
 });

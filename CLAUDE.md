@@ -64,8 +64,20 @@ there is no build step and no test framework dependency.
 - Migrations are append-only and numbered. Never edit one that has been applied
   to a real database.
 - A shared field that is empty renders as `-`, not omitted. A field that was
-  never shared is absent entirely. The difference is load-bearing: it separates
-  "they didn't fill this in" from "they didn't share this".
+  never shared, or whose toggle is currently off, is absent entirely. The
+  difference is load-bearing: it separates "they didn't fill this in" from
+  "they didn't share this". Never render a revoked field as `-`.
+- Visibility follows one thing: the subject's **current** shareable toggle.
+  Off hides the field from everyone immediately; on reveals it to everyone
+  immediately, including people they met while it was off. There is no
+  per-connection field set. `connections.fields_at_exchange` is a historical
+  record of what was shared that day and must never be used to decide access.
+  See D3.
+- `first_name` and `last_name` are the only required fields, and they are still
+  ordinary shareable fields. Anything that shows a person's name must handle
+  both halves being withheld, and fall back to the username.
+- Lists of 1:1 requests read `public.visible_one_on_ones`, never the table. A
+  declined request disappears from both people's lists.
 
 ## What is not built yet
 

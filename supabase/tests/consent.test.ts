@@ -26,10 +26,10 @@ async function completeExchange(a: string, b: string) {
   const minted = row<{ token: string }>(
     await db.as(a, `select * from public.mint_qr_token(120)`),
   );
-  const opened = row<{ open_qr_exchange: string }>(
-    await db.as(b, `select public.open_qr_exchange($1)`, [minted.token]),
+  const opened = row<{ exchange_id: string }>(
+    await db.as(b, `select * from public.open_qr_exchange($1)`, [minted.token]),
   );
-  const id = opened.open_qr_exchange;
+  const id = opened.exchange_id;
   await db.as(b, `select public.confirm_exchange($1)`, [id]);
   await db.as(a, `select public.confirm_exchange($1)`, [id]);
   return id;
@@ -45,24 +45,24 @@ describe('profile isolation', () => {
            from public.profile_field_shares`,
       ),
     );
-    assert.equal(res.total, 17);
-    assert.equal(res.on, 17, 'the shareable toggle must default to on');
+    assert.equal(res.total, 18);
+    assert.equal(res.on, 18, 'the shareable toggle must default to on');
   });
 
   test('field share rows are scoped to their owner', async () => {
-    // Alice sees 17 rows, not 34, even though Bob's rows exist.
+    // Alice sees 18 rows, not 36, even though Bob's rows exist.
     const res = row<{ n: number }>(
       await db.as(alice, `select count(*)::int as n from public.profile_field_shares`),
     );
-    assert.equal(res.n, 17);
+    assert.equal(res.n, 18);
   });
 
   test('one user cannot read another user\'s profile row', async () => {
-    await db.as(alice, `update public.profiles set name = 'Alice Alvarez'`);
+    await db.as(alice, `update public.profiles set first_name = 'Alice', last_name = 'Alvarez'`);
 
     const res = await db.as(
       bob,
-      `select name from public.profiles where user_id = $1`,
+      `select first_name from public.profiles where user_id = $1`,
       [alice],
     );
     assert.equal(
@@ -73,61 +73,61 @@ describe('profile isolation', () => {
   });
 
   test('one user cannot write another user\'s profile row', async () => {
-    await db.as(bob, `update public.profiles set name = 'not alice' where user_id = $1`, [
+    await db.as(bob, `update public.profiles set first_name = 'Not', last_name = 'Alice' where user_id = $1`, [
       alice,
     ]);
-    const mine = row<{ name: string }>(
-      await db.as(alice, `select name from public.profiles`),
+    const mine = row<{ first_name: string }>(
+      await db.as(alice, `select first_name from public.profiles`),
     );
-    assert.equal(mine.name, 'Alice Alvarez', 'the update must have affected zero rows');
+    assert.equal(mine.first_name, 'Alice', 'the update must have affected zero rows');
   });
 });
 
 describe('the projection', () => {
-  test('returns only the fields that were frozen into the connection', async () => {
-    const card = row<{ project_shared_profile: Record<string, string> }>(
-      await db.admin(
-        `select public.project_shared_profile($1, array['name','school']::public.profile_field[])`,
-        [alice],
-      ),
+  const project = async (subject: string) =>
+    row<{ project_shared_profile: Record<string, string> }>(
+      await db.admin(`select public.project_shared_profile($1)`, [subject]),
     ).project_shared_profile;
 
-    assert.deepEqual(Object.keys(card).sort(), ['name', 'school']);
-    assert.equal(card.name, 'Alice Alvarez');
+  test('returns every field currently marked shareable', async () => {
+    const card = await project(alice);
+
+    // All 18 fields are on by default, so all 18 come back.
+    assert.equal(Object.keys(card).length, 18);
+    assert.equal(card.first_name, 'Alice');
+    assert.equal(card.last_name, 'Alvarez');
   });
 
   test('a shared field left empty renders as "-" rather than vanishing', async () => {
-    const card = row<{ project_shared_profile: Record<string, string> }>(
-      await db.admin(
-        `select public.project_shared_profile($1, array['hometown']::public.profile_field[])`,
-        [alice],
-      ),
-    ).project_shared_profile;
-
-    assert.equal(card.hometown, '-');
+    assert.equal((await project(alice)).hometown, '-');
   });
 
   test('whitespace counts as empty', async () => {
     await db.as(alice, `update public.profiles set major = '   '`);
-    const card = row<{ project_shared_profile: Record<string, string> }>(
-      await db.admin(
-        `select public.project_shared_profile($1, array['major']::public.profile_field[])`,
-        [alice],
-      ),
-    ).project_shared_profile;
-
-    assert.equal(card.major, '-');
+    assert.equal((await project(alice)).major, '-');
   });
 
-  test('an empty field set projects nothing at all', async () => {
-    const card = row<{ project_shared_profile: Record<string, string> }>(
-      await db.admin(
-        `select public.project_shared_profile($1, '{}'::public.profile_field[])`,
-        [alice],
-      ),
-    ).project_shared_profile;
+  test('a field whose toggle is off is absent, not "-"', async () => {
+    await db.as(
+      alice,
+      `update public.profile_field_shares set shareable = false where field = 'hometown'`,
+    );
 
-    assert.deepEqual(card, {});
+    const card = await project(alice);
+    assert.equal(card.hometown, undefined);
+    assert.equal(Object.keys(card).length, 17);
+
+    await db.as(
+      alice,
+      `update public.profile_field_shares set shareable = true where field = 'hometown'`,
+    );
+  });
+
+  test('sharing nothing at all projects nothing at all', async () => {
+    await db.as(alice, `update public.profile_field_shares set shareable = false`);
+    assert.deepEqual(await project(alice), {});
+
+    await db.as(alice, `update public.profile_field_shares set shareable = true`);
   });
 });
 
@@ -136,9 +136,9 @@ describe('exchange handshake', () => {
     const minted = row<{ token: string }>(
       await db.as(alice, `select * from public.mint_qr_token(120)`),
     );
-    const id = row<{ open_qr_exchange: string }>(
-      await db.as(bob, `select public.open_qr_exchange($1)`, [minted.token]),
-    ).open_qr_exchange;
+    const id = row<{ exchange_id: string }>(
+      await db.as(bob, `select * from public.open_qr_exchange($1)`, [minted.token]),
+    ).exchange_id;
 
     const state = row<{ confirm_exchange: string }>(
       await db.as(bob, `select public.confirm_exchange($1)`, [id]),
@@ -158,7 +158,7 @@ describe('exchange handshake', () => {
     const minted = row<{ token: string }>(
       await db.as(alice, `select * from public.mint_qr_token(120)`),
     );
-    await db.as(bob, `select public.open_qr_exchange($1)`, [minted.token]);
+    await db.as(bob, `select * from public.open_qr_exchange($1)`, [minted.token]);
 
     const n = row<{ n: number }>(
       await db.admin(`select count(*)::int as n from public.connections`),
@@ -175,7 +175,7 @@ describe('exchange handshake', () => {
       `update public.profile_field_shares set shareable = false where field = 'phone'`,
     );
     await db.as(alice, `update public.profiles set phone = '+1 555 0100', school = 'Brown'`);
-    await db.as(bob, `update public.profiles set name = 'Bob Birch', school = 'Brown'`);
+    await db.as(bob, `update public.profiles set first_name = 'Bob', last_name = 'Birch', school = 'Brown'`);
 
     await completeExchange(alice, bob);
 
@@ -188,8 +188,8 @@ describe('exchange handshake', () => {
     }>(
       await db.admin(
         `select owner_id,
-                coalesce(array_length(shared_fields, 1), 0) as field_count,
-                ('phone' = any (shared_fields)) as shares_phone
+                coalesce(array_length(fields_at_exchange, 1), 0) as field_count,
+                ('phone' = any (fields_at_exchange)) as shares_phone
            from public.connections
           order by owner_id`,
       ),
@@ -202,15 +202,15 @@ describe('exchange handshake', () => {
     assert.equal(
       bobsRow.shares_phone,
       false,
-      'Alice withheld her phone, so it must not be frozen into Bob\'s row',
+      'Alice withheld her phone, so it is not in the record of that exchange',
     );
-    assert.equal(Number(bobsRow.field_count), 16);
+    assert.equal(Number(bobsRow.field_count), 17);
     assert.equal(
       alicesRow.shares_phone,
       true,
       'Bob shared everything, so Alice\'s row carries his phone field',
     );
-    assert.equal(Number(alicesRow.field_count), 17);
+    assert.equal(Number(alicesRow.field_count), 18);
   });
 
   test('the withheld field is absent from the card, not blanked', async () => {
@@ -241,9 +241,9 @@ describe('exchange handshake', () => {
     const minted = row<{ token: string }>(
       await db.as(charlie, `select * from public.mint_qr_token(120)`),
     );
-    const id = row<{ open_qr_exchange: string }>(
-      await db.as(bob, `select public.open_qr_exchange($1)`, [minted.token]),
-    ).open_qr_exchange;
+    const id = row<{ exchange_id: string }>(
+      await db.as(bob, `select * from public.open_qr_exchange($1)`, [minted.token]),
+    ).exchange_id;
 
     await db.as(bob, `select public.confirm_exchange($1)`, [id]);
 
@@ -272,9 +272,9 @@ describe('exchange handshake', () => {
     const minted = row<{ token: string }>(
       await db.as(dana, `select * from public.mint_qr_token(120)`),
     );
-    const id = row<{ open_qr_exchange: string }>(
-      await db.as(erin, `select public.open_qr_exchange($1)`, [minted.token]),
-    ).open_qr_exchange;
+    const id = row<{ exchange_id: string }>(
+      await db.as(erin, `select * from public.open_qr_exchange($1)`, [minted.token]),
+    ).exchange_id;
 
     const err = await db.asExpectingFailure(
       bob,

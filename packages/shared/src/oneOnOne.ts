@@ -56,6 +56,20 @@ export function schedulingTimeLeftMs(windows: Windows, now: Date = new Date()): 
   return Math.max(0, windows.expiresAt.getTime() - now.getTime());
 }
 
+/**
+ * Whether a request belongs in either person's list.
+ *
+ * A declined request disappears from both lists rather than sitting there
+ * reading "declined". An expired one stays, because someone who agreed to meet
+ * and then ran out of time should be told so.
+ *
+ * The database already filters this through `public.visible_one_on_ones`, so
+ * this is for client-side lists built from data already in hand.
+ */
+export function isVisibleInList(status: OneOnOneStatus): boolean {
+  return status !== 'declined';
+}
+
 /** Whether the scheduling chat should accept new messages. */
 export function chatIsOpen(
   status: OneOnOneStatus,

@@ -3,9 +3,9 @@
 -- Trust model, in one paragraph:
 --   `profiles` is readable ONLY by the person it describes. No other user, at
 --   any time, holds a SELECT grant on someone else's profile row. The only way
---   one user ever sees another user's data is public.connection_card(uuid), a
---   SECURITY DEFINER function that returns just the fields frozen into that
---   connection at exchange time. That makes the database the enforcement point
+--   one user ever sees another user's data is public.project_shared_profile(uuid), a
+--   SECURITY DEFINER function that returns just the fields that person is
+--   currently sharing. That makes the database the enforcement point
 --   for consent: a bug in a client cannot widen what that client may see.
 --
 -- See docs/03-decisions.md for the reasoning behind non-obvious choices, and
@@ -22,8 +22,11 @@ create extension if not exists "citext";
 -- purpose: every field here can cross a privacy boundary, so new ones should
 -- be deliberate and reviewed rather than ad hoc.
 create type public.profile_field as enum (
-  -- basic info
-  'name',
+  -- basic info. first_name and last_name are the only REQUIRED profile fields;
+  -- everything else is optional. Required means "must be filled in", not "must
+  -- be shared": both still carry a shareable toggle like any other field.
+  'first_name',
+  'last_name',
   'school',
   'societies',
   'major',
@@ -54,7 +57,8 @@ create type public.exchange_state as enum (
 );
 
 -- NOTE: 'declined' is not in the status list in the brief, but the brief also
--- says decline is a flow that fires a push notification. See open question Q6.
+-- says decline is a flow. See Q4: a declined request disappears from both
+-- lists and, unlike approval, sends no notification.
 create type public.one_on_one_status as enum (
   'pending',
   'approved',
@@ -71,8 +75,9 @@ create table public.profiles (
   user_id       uuid primary key references auth.users(id) on delete cascade,
   username      citext not null unique,
 
-  -- basic info (all optional, per spec)
-  name          text,
+  -- basic info. Only the two name fields are required.
+  first_name    text not null,
+  last_name     text not null,
   school        text,
   societies     text,
   major         text,
@@ -95,12 +100,26 @@ create table public.profiles (
   work_email     text,
   personal_email text,
 
+  -- Discord's numeric user id. A username alone cannot be turned into a
+  -- profile link; the id can (https://discord.com/users/{id}), which is why it
+  -- is collected at all. It is NOT a separate shareable field: it rides along
+  -- with `discord`, because sharing a username while withholding the id that
+  -- makes it tappable would be a setting with no sensible meaning.
+  discord_id     text,
+
   created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
+  updated_at timestamptz not null default now(),
+
+  -- The only required profile content in v1.
+  constraint profiles_first_name_present check (btrim(first_name) <> ''),
+  constraint profiles_last_name_present  check (btrim(last_name)  <> ''),
+  -- Discord ids are snowflakes: 17 to 20 digits in practice.
+  constraint profiles_discord_id_numeric
+    check (discord_id is null or discord_id ~ '^[0-9]{15,25}$')
 );
 
 comment on table public.profiles is
-  'One row per user. Readable only by its owner. Other users reach a subset of these columns exclusively through public.connection_card().';
+  'One row per user. Readable only by its owner. Other users reach a subset of these columns exclusively through public.project_shared_profile().';
 
 -- ---------------------------------------------------------------------------
 -- Standing "shareable" toggles
@@ -201,11 +220,16 @@ create table public.connections (
   exchange_id uuid references public.exchanges(id) on delete set null,
   met_via     public.exchange_method not null,
 
-  -- The set of fields `other_id` had marked shareable at the moment of the
-  -- exchange. Frozen here; the VALUES behind these fields are read live from
-  -- the other person's profile, so their later edits show through. See open
-  -- question Q1 for the consent-revocation case this does NOT cover.
-  shared_fields public.profile_field[] not null default '{}',
+  -- A record of which fields `other_id` was sharing at the moment of the
+  -- exchange. HISTORICAL ONLY: this does not decide what the owner can see.
+  --
+  -- Visibility follows the other person's CURRENT shareable toggles, so
+  -- turning a field off hides it from everyone immediately and turning it on
+  -- reveals it to everyone immediately, including people met while it was off.
+  -- Nothing reads this column to answer "may I see this field"; see
+  -- public.project_shared_profile(). It is kept because it answers a different
+  -- and occasionally useful question: what did we show each other that day.
+  fields_at_exchange public.profile_field[] not null default '{}',
 
   -- "How you met": free text with a day-level timestamp.
   how_we_met    text,
@@ -225,8 +249,8 @@ create table public.connections (
 create index connections_owner_idx on public.connections (owner_id, created_at desc);
 create index connections_other_idx on public.connections (other_id);
 
-comment on column public.connections.shared_fields is
-  'Frozen at exchange time: WHICH fields the other person consented to share. Values are resolved live from their profile at read time.';
+comment on column public.connections.fields_at_exchange is
+  'Historical record of what the other person was sharing when you met. Does NOT gate visibility: that follows their current shareable toggles.';
 
 -- ---------------------------------------------------------------------------
 -- Notes (private to the connection owner, always)

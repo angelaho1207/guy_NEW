@@ -1,15 +1,16 @@
 /**
  * Turning a stored handle into something tappable.
  *
- * The brief: handles are stored bare and the profile URL is constructed from
- * them, so tapping LinkedIn, X or Instagram opens the profile, tapping a phone
- * number opens the dialer, and tapping an email opens the mail client.
+ * Handles are stored bare and the profile URL is constructed from them, so
+ * tapping LinkedIn, X or Instagram opens the profile, tapping a phone number
+ * opens the dialer, and tapping an email opens the mail client.
  *
- * Discord is the exception and is currently NOT tappable. See open question Q3
- * in docs/01-open-questions.md: a Discord username alone cannot be resolved to
- * a profile link, and whether to also collect the numeric user ID is an open
- * product decision. Until that is answered this returns null, and the UI
- * renders plain text.
+ * Discord needs a second value. A username cannot be resolved to a profile
+ * link, but the numeric user id can, so the profile collects both: the
+ * username is what people recognise, the id is what makes it tappable. The id
+ * is not separately shareable; it travels with the username. Pass it to
+ * `linkFor` as the third argument. Without it, Discord renders as plain text
+ * rather than as a link that goes nowhere.
  */
 
 import type { ProfileField } from './fields.ts';
@@ -78,13 +79,23 @@ export function normalizeHandle(field: HandleField, raw: string): string {
   return value.trim();
 }
 
+/** A Discord user id is a snowflake: a long run of digits. */
+export function isValidDiscordId(id: string | null | undefined): boolean {
+  return typeof id === 'string' && /^[0-9]{15,25}$/.test(id.trim());
+}
+
 /**
  * The URL a tap should open, or null when this handle is not tappable.
  *
  * Returning null is meaningful: the caller must render plain text rather than
- * inventing a link that goes somewhere wrong.
+ * inventing a link that goes somewhere wrong. Discord returns null unless a
+ * valid numeric id is supplied, since the username alone cannot be resolved.
  */
-export function linkFor(field: HandleField, handle: string): string | null {
+export function linkFor(
+  field: HandleField,
+  handle: string,
+  discordId?: string | null,
+): string | null {
   const value = normalizeHandle(field, handle);
   if (value === '') return null;
 
@@ -101,8 +112,10 @@ export function linkFor(field: HandleField, handle: string): string | null {
     case 'personal_email':
       return `mailto:${value}`;
     case 'discord':
-      // Unresolved product decision, see Q3. Plain text until then.
-      return null;
+      // The username is what shows; the id is what the tap follows.
+      return isValidDiscordId(discordId)
+        ? `https://discord.com/users/${discordId!.trim()}`
+        : null;
   }
 }
 

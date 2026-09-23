@@ -5,6 +5,7 @@ import {
   canPropose,
   schedulingTimeLeftMs,
   chatIsOpen,
+  isVisibleInList,
 } from '../src/oneOnOne.ts';
 
 const approvedAt = new Date('2026-09-22T12:00:00Z');
@@ -59,6 +60,22 @@ describe('time left to agree', () => {
   test('never goes negative', () => {
     const now = new Date('2026-10-01T12:00:00Z');
     assert.equal(schedulingTimeLeftMs(windows, now), 0);
+  });
+});
+
+describe('what appears in the list', () => {
+  test('a declined request disappears from both sides', () => {
+    assert.equal(isVisibleInList('declined'), false);
+  });
+
+  test('an expired request stays, because it needs explaining', () => {
+    assert.equal(isVisibleInList('expired'), true);
+  });
+
+  test('everything live is listed', () => {
+    for (const status of ['pending', 'approved', 'scheduled'] as const) {
+      assert.equal(isVisibleInList(status), true);
+    }
   });
 });
 

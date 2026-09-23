@@ -182,15 +182,27 @@ security definer
 set search_path = public
 as $fn$
 declare
-  v_username text;
+  v_username   text;
+  v_first_name text;
+  v_last_name  text;
 begin
-  v_username := lower(btrim(coalesce(new.raw_user_meta_data ->> 'username', '')));
+  v_username   := lower(btrim(coalesce(new.raw_user_meta_data ->> 'username', '')));
+  v_first_name := btrim(coalesce(new.raw_user_meta_data ->> 'first_name', ''));
+  v_last_name  := btrim(coalesce(new.raw_user_meta_data ->> 'last_name', ''));
 
   if v_username !~ '^[a-z0-9._]{3,30}$' then
     raise exception 'invalid username: must be 3-30 chars of a-z, 0-9, dot or underscore';
   end if;
 
-  insert into public.profiles (user_id, username) values (new.id, v_username);
+  -- First and last name are the only required profile content, so signup is
+  -- the one place they can be collected. A profile cannot exist without them.
+  if v_first_name = '' or v_last_name = '' then
+    raise exception 'first name and last name are required';
+  end if;
+
+  insert into public.profiles (user_id, username, first_name, last_name)
+  values (new.id, v_username, v_first_name, v_last_name);
+
   return new;
 end;
 $fn$;
@@ -217,28 +229,35 @@ as $fn$
   where user_id = p_user and shareable;
 $fn$;
 
--- Projects exactly `p_fields` of `p_user`'s profile into a jsonb object.
+-- Projects everything `p_user` is CURRENTLY sharing into a jsonb object.
 --
--- Two rules from the spec are enforced here and nowhere else:
---   1. Only the listed fields appear. Anything not listed does not exist as far
---      as the caller is concerned.
---   2. A listed field that is empty renders as "-" rather than being omitted,
+-- Three rules are enforced here and nowhere else:
+--
+--   1. A field appears if and only if its owner's shareable toggle is on right
+--      now. Turning a toggle off hides that field from everyone who has it,
+--      immediately. Turning it on reveals it to everyone, immediately, even to
+--      people met while it was off. There is no per-connection field set:
+--      `connections.fields_at_exchange` is a historical record and is
+--      deliberately not consulted here.
+--
+--   2. A shared field that is empty renders as "-" rather than being omitted,
 --      so the reader can tell "they chose not to fill this in" apart from
---      "they chose not to share this".
+--      "they chose not to share this". A field that is NOT shared is absent
+--      entirely, never "-".
 --
--- This function is SECURITY DEFINER and is granted to `authenticated`, because
--- the views below run as their caller and so the caller needs EXECUTE. That
--- means a client can call it directly, with arguments of its choosing, so the
--- function cannot assume its caller passed an honest field set. It checks for
--- itself that the caller holds a connection to `p_user` whose frozen set
--- covers every field being asked for.
+--   3. Sharing `discord` carries `discord_id` with it, because the id is what
+--      makes the username tappable and is meaningless on its own.
 --
--- A null auth.uid() means a trusted server context: the scheduled jobs and the
+-- Note there is no field-list argument. An earlier version took one, which
+-- meant a client calling this directly could ask for a set of its own
+-- choosing and the function had to defend itself against its own caller. With
+-- visibility driven entirely by the subject's toggles, the argument has no
+-- reason to exist, and the whole class of problem goes with it.
+--
+-- The remaining check is that the caller is connected to `p_user` at all. A
+-- null auth.uid() means a trusted server context: the scheduled jobs and the
 -- service role, neither of which comes from a client.
-create or replace function public.project_shared_profile(
-  p_user   uuid,
-  p_fields public.profile_field[]
-)
+create or replace function public.project_shared_profile(p_user uuid)
 returns jsonb
 language plpgsql
 stable
@@ -252,15 +271,14 @@ declare
   v_val   text;
   v_uid   uuid := auth.uid();
 begin
-  if v_uid is not null and not exists (
+  if v_uid is not null and v_uid <> p_user and not exists (
     select 1
     from public.connections c
     where c.owner_id = v_uid
       and c.other_id = p_user
-      and coalesce(p_fields, '{}'::public.profile_field[]) <@ c.shared_fields
   ) then
     raise exception
-      'not authorised to read those fields of that profile'
+      'not authorised to read that profile'
       using errcode = '42501';
   end if;
 
@@ -270,10 +288,23 @@ begin
     return '{}'::jsonb;
   end if;
 
-  foreach v_field in array coalesce(p_fields, '{}'::public.profile_field[]) loop
+  for v_field in
+    select s.field
+    from public.profile_field_shares s
+    where s.user_id = p_user and s.shareable
+    order by s.field
+  loop
     -- The enum label and the column name are identical by construction.
     v_val := nullif(btrim(coalesce(v_row ->> (v_field::text), '')), '');
     v_out := v_out || jsonb_build_object(v_field::text, coalesce(v_val, '-'));
+
+    -- Rule 3.
+    if v_field = 'discord' then
+      v_val := nullif(btrim(coalesce(v_row ->> 'discord_id', '')), '');
+      if v_val is not null then
+        v_out := v_out || jsonb_build_object('discord_id', v_val);
+      end if;
+    end if;
   end loop;
 
   return v_out;
@@ -282,7 +313,7 @@ $fn$;
 
 -- The contacts list. security_invoker = true keeps RLS on `connections`
 -- applying to the caller, so this view is guarded twice: once by that policy,
--- once by the frozen field set passed into the projection.
+-- once by the projection, which returns only what its subject currently shares.
 create or replace view public.contact_cards
 with (security_invoker = true)
 as
@@ -290,13 +321,13 @@ select
   c.id            as connection_id,
   c.other_id,
   c.met_via,
-  c.shared_fields,
+  c.fields_at_exchange,
   c.how_we_met,
   c.how_we_met_on,
   c.want_follow_up,
   c.follow_up_topic,
   c.created_at,
-  public.project_shared_profile(c.other_id, c.shared_fields) as card
+  public.project_shared_profile(c.other_id) as card
 from public.connections c;
 
 -- ---------------------------------------------------------------------------
@@ -351,8 +382,14 @@ $fn$;
 
 -- Scanning a code opens a handshake. It does not share anything: both people
 -- still have to confirm in-app, inside the 30 second window.
+--
+-- Returns ('already_connected', null) when these two already have each other,
+-- so the app can show a plain "Already connected!" and stop. Nothing is
+-- re-exchanged and no prompt is raised on either phone. The scanned code is
+-- also left unspent, so a mistaken scan does not cost the other person their
+-- live code.
 create or replace function public.open_qr_exchange(p_token text)
-returns uuid
+returns table (status text, exchange_id uuid)
 language plpgsql
 security definer
 set search_path = public
@@ -366,12 +403,13 @@ begin
     raise exception 'not authenticated';
   end if;
 
-  update public.qr_tokens
-     set consumed_at = now(), consumed_by = v_uid
-   where token = p_token
-     and consumed_at is null
-     and expires_at > now()
-  returning user_id into v_owner;
+  -- Locked, then consumed only if the exchange actually opens.
+  select q.user_id into v_owner
+  from public.qr_tokens q
+  where q.token = p_token
+    and q.consumed_at is null
+    and q.expires_at > now()
+  for update;
 
   if v_owner is null then
     raise exception 'qr code is expired or already used';
@@ -381,18 +419,30 @@ begin
     raise exception 'cannot exchange with yourself';
   end if;
 
+  if exists (
+    select 1 from public.connections c
+    where c.owner_id = v_uid and c.other_id = v_owner
+  ) then
+    return query select 'already_connected'::text, null::uuid;
+    return;
+  end if;
+
+  update public.qr_tokens q
+     set consumed_at = now(), consumed_by = v_uid
+   where q.token = p_token;
+
   insert into public.exchanges (method, initiator_id, responder_id, expires_at)
   values ('qr', v_uid, v_owner, now() + interval '30 seconds')
   returning id into v_id;
 
-  return v_id;
+  return query select 'opened'::text, v_id;
 end;
 $fn$;
 
 -- The UWB path. The Swift module resolves the nearby peer to a user id and
 -- calls this. See open question Q7 about authenticating that peer id.
 create or replace function public.open_uwb_exchange(p_other uuid)
-returns uuid
+returns table (status text, exchange_id uuid)
 language plpgsql
 security definer
 set search_path = public
@@ -413,11 +463,19 @@ begin
     raise exception 'unknown peer';
   end if;
 
+  if exists (
+    select 1 from public.connections c
+    where c.owner_id = v_uid and c.other_id = p_other
+  ) then
+    return query select 'already_connected'::text, null::uuid;
+    return;
+  end if;
+
   insert into public.exchanges (method, initiator_id, responder_id, expires_at)
   values ('uwb', v_uid, p_other, now() + interval '30 seconds')
   returning id into v_id;
 
-  return v_id;
+  return query select 'opened'::text, v_id;
 end;
 $fn$;
 
@@ -476,18 +534,20 @@ begin
 
   -- Both sides are in. Freeze each person's current shareable set into the
   -- other person's row and create both directions together.
+  --
+  -- `do nothing` on conflict, not `do update`. An already-connected pair is
+  -- turned away by open_*_exchange() before a prompt is ever raised, so
+  -- reaching this line with an existing row means two handshakes raced. In
+  -- that case the safe move is to leave the existing row alone rather than
+  -- overwrite its history and its owner's notes.
   insert into public.connections
-    (owner_id, other_id, exchange_id, met_via, shared_fields)
+    (owner_id, other_id, exchange_id, met_via, fields_at_exchange)
   values
     (v_ex.initiator_id, v_ex.responder_id, v_ex.id, v_ex.method,
      public.shareable_fields(v_ex.responder_id)),
     (v_ex.responder_id, v_ex.initiator_id, v_ex.id, v_ex.method,
      public.shareable_fields(v_ex.initiator_id))
-  on conflict (owner_id, other_id) do update
-     set shared_fields = excluded.shared_fields,
-         exchange_id   = excluded.exchange_id,
-         met_via       = excluded.met_via,
-         updated_at    = now();
+  on conflict (owner_id, other_id) do nothing;
 
   update public.exchanges
      set state = 'completed', settled_at = now()
@@ -533,6 +593,12 @@ $fn$;
 -- Reminders
 -- ---------------------------------------------------------------------------
 
+-- Sets or replaces the single reminder on a connection.
+--
+-- A connection has one reminder slot. Marking a follow-up done frees it: the
+-- row stays so the in-app list can show what was completed, and the next call
+-- here overwrites it and clears the fired and done stamps, so a fresh reminder
+-- behaves exactly like a first one. See public.complete_follow_up().
 create or replace function public.set_reminder(
   p_connection_id uuid,
   p_days  integer,
@@ -580,6 +646,41 @@ begin
 end;
 $fn$;
 
+-- Marks a fired follow-up done, which frees the connection's reminder slot.
+--
+-- A client can equally set `done_at` directly, which its column grant allows.
+-- This exists so the common action has one obvious name and so the "only your
+-- own connection" check lives somewhere rather than being implied by RLS.
+create or replace function public.complete_follow_up(p_connection_id uuid)
+returns public.reminders
+language plpgsql
+security definer
+set search_path = public
+as $fn$
+declare
+  v_uid uuid := auth.uid();
+  v_row public.reminders%rowtype;
+begin
+  if not exists (
+    select 1 from public.connections
+    where id = p_connection_id and owner_id = v_uid
+  ) then
+    raise exception 'connection not found';
+  end if;
+
+  update public.reminders
+     set done_at = now(), updated_at = now()
+   where connection_id = p_connection_id
+  returning * into v_row;
+
+  if v_row.id is null then
+    raise exception 'no reminder on that connection';
+  end if;
+
+  return v_row;
+end;
+$fn$;
+
 -- The running list of undone follow-ups: fired but not yet marked done.
 create or replace view public.undone_follow_ups
 with (security_invoker = true)
@@ -590,7 +691,7 @@ select
   c.other_id,
   r.fire_at,
   r.fired_at,
-  public.project_shared_profile(c.other_id, c.shared_fields) as card
+  public.project_shared_profile(c.other_id) as card
 from public.reminders r
 join public.connections c on c.id = r.connection_id
 where r.fired_at is not null and r.done_at is null;
@@ -681,15 +782,19 @@ begin
     returning * into v_row;
   end if;
 
-  insert into public.push_outbox (user_id, title, body, data)
-  values (
-    v_row.requester_id,
-    'Guy',
-    format('%s %s your 1:1 request.',
-           public.display_name_for(v_uid, v_row.requester_id),
-           case when p_approve then 'approved' else 'declined' end),
-    jsonb_build_object('kind', 'one_on_one_response', 'request_id', v_row.id)
-  );
+  -- Approval notifies. A decline does not: it simply disappears from both
+  -- lists, with nothing sent and nothing left saying "declined". Turning
+  -- someone down should not come with an announcement.
+  if p_approve then
+    insert into public.push_outbox (user_id, title, body, data)
+    values (
+      v_row.requester_id,
+      'Guy',
+      format('%s approved your 1:1 request.',
+             public.display_name_for(v_uid, v_row.requester_id)),
+      jsonb_build_object('kind', 'one_on_one_response', 'request_id', v_row.id)
+    );
+  end if;
 
   return v_row;
 end;
@@ -755,13 +860,48 @@ begin
 end;
 $fn$;
 
+-- The 1:1 requests either person should actually see.
+--
+-- A declined request disappears from both people's lists rather than sitting
+-- there reading "declined". The row is kept, not deleted, because it is what
+-- makes the pair eligible to send a new request and it is worth having if a
+-- dispute ever arises. It is simply never listed. Clients read this view
+-- rather than the table, so "disappears" is structural rather than a filter
+-- each screen has to remember.
+--
+-- Expired requests are listed, because someone who agreed to meet and then ran
+-- out of time should be told so.
+create or replace view public.visible_one_on_ones
+with (security_invoker = true)
+as
+select
+  r.id,
+  r.requester_id,
+  r.recipient_id,
+  r.connection_id,
+  r.status,
+  r.created_at,
+  r.approved_at,
+  r.expires_at,
+  r.outer_limit_at,
+  r.scheduled_for,
+  r.scheduled_at
+from public.one_on_one_requests r
+where r.status <> 'declined';
+
 -- ---------------------------------------------------------------------------
 -- Name resolution for notifications
 -- ---------------------------------------------------------------------------
 
--- What `p_viewer` is allowed to see `p_subject` called. Falls back to the
--- username when the name field was not shared or is blank, so a notification
--- never leaks a name the viewer has no right to.
+-- What `p_viewer` is allowed to see `p_subject` called: "[First] [Last]", per
+-- the notification copy in the brief.
+--
+-- Both name fields are required, so they are never blank. They are still
+-- ordinary shareable fields, though, and sharing can be revoked after the
+-- fact, so this applies the same test as the projection: are both name fields
+-- shareable right now. A push notification must never carry a name the
+-- recipient is no longer allowed to see, which is why this does not just read
+-- the profile.
 create or replace function public.display_name_for(p_subject uuid, p_viewer uuid)
 returns text
 language plpgsql
@@ -772,13 +912,20 @@ as $fn$
 declare
   v_name text;
 begin
-  select nullif(btrim(p.name), '')
+  select nullif(btrim(concat_ws(' ', p.first_name, p.last_name)), '')
     into v_name
   from public.connections c
   join public.profiles p on p.user_id = c.other_id
   where c.owner_id = p_viewer
     and c.other_id = p_subject
-    and 'name' = any (c.shared_fields);
+    and exists (
+      select 1 from public.profile_field_shares s
+      where s.user_id = p_subject and s.field = 'first_name' and s.shareable
+    )
+    and exists (
+      select 1 from public.profile_field_shares s
+      where s.user_id = p_subject and s.field = 'last_name' and s.shareable
+    );
 
   if v_name is not null then
     return v_name;
@@ -806,9 +953,9 @@ grant usage on schema public to authenticated;
 -- sit on a row the user owns, and a blanket table-level UPDATE would hand them
 -- over:
 --
---   connections.shared_fields  -- the other person's consent, recorded. If the
---                                 owner could widen it, they could project
---                                 that person's entire profile.
+--   connections.fields_at_exchange -- a record of what was shared that day.
+--                                 It no longer gates visibility, but it is
+--                                 still a record, not the owner's to rewrite.
 --   connections.other_id       -- who the row is about.
 --   reminders.fire_at          -- the 1 hour to 7 days rule lives in
 --                                 set_reminder(); a writable fire_at routes
@@ -818,9 +965,11 @@ grant usage on schema public to authenticated;
 grant select on public.profiles to authenticated;
 grant insert on public.profiles to authenticated;
 grant update (
-  name, school, societies, major, class_year, affiliations, hometown,
+  first_name, last_name, school, societies, major, class_year, affiliations,
+  hometown,
   currently_into, want_to_learn, figuring_out,
-  linkedin, x, discord, instagram, phone, work_email, personal_email,
+  linkedin, x, discord, discord_id, instagram, phone, work_email,
+  personal_email,
   updated_at
 ) on public.profiles to authenticated;
 
@@ -853,11 +1002,11 @@ grant select, insert, update, delete on public.push_tokens to authenticated;
 --   any write on exchanges -- only the exchange functions may transition state
 --   any write on one_on_one_requests -- only the 1:1 functions may
 
-revoke all on function public.project_shared_profile(uuid, public.profile_field[]) from public;
+revoke all on function public.project_shared_profile(uuid) from public;
 revoke all on function public.shareable_fields(uuid) from public;
 revoke all on function public.display_name_for(uuid, uuid) from public;
 
-grant execute on function public.project_shared_profile(uuid, public.profile_field[]) to authenticated;
+grant execute on function public.project_shared_profile(uuid) to authenticated;
 grant execute on function public.shareable_fields(uuid) to authenticated;
 grant execute on function public.mint_qr_token(integer) to authenticated;
 grant execute on function public.open_qr_exchange(text) to authenticated;
@@ -865,9 +1014,11 @@ grant execute on function public.open_uwb_exchange(uuid) to authenticated;
 grant execute on function public.confirm_exchange(uuid) to authenticated;
 grant execute on function public.decline_exchange(uuid) to authenticated;
 grant execute on function public.set_reminder(uuid, integer, integer) to authenticated;
+grant execute on function public.complete_follow_up(uuid) to authenticated;
 grant execute on function public.request_one_on_one(uuid) to authenticated;
 grant execute on function public.respond_one_on_one(uuid, boolean) to authenticated;
 grant execute on function public.schedule_one_on_one(uuid, timestamptz) to authenticated;
 
 grant select on public.contact_cards to authenticated;
 grant select on public.undone_follow_ups to authenticated;
+grant select on public.visible_one_on_ones to authenticated;

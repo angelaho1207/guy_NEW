@@ -66,8 +66,12 @@ export type Db = {
   as(uid: string, sql: string, params?: unknown[]): Promise<any>;
   /** Like `as`, but resolves to the error message instead of throwing. */
   asExpectingFailure(uid: string, sql: string, params?: unknown[]): Promise<string>;
-  /** Create an auth user + profile, returning the new user id. */
-  createUser(username: string): Promise<string>;
+  /**
+   * Create an auth user + profile, returning the new user id.
+   * First and last name are required profile content, so they are supplied
+   * here; the defaults keep tests that do not care about names readable.
+   */
+  createUser(username: string, firstName?: string, lastName?: string): Promise<string>;
   close(): Promise<void>;
 };
 
@@ -117,13 +121,19 @@ export async function boot(): Promise<Db> {
     throw new Error('expected the statement to be rejected, but it succeeded');
   };
 
-  const createUser = async (username: string) => {
+  const createUser = async (username: string, firstName?: string, lastName?: string) => {
     await reset();
+    const first = firstName ?? username[0].toUpperCase() + username.slice(1);
+    const last = lastName ?? 'Test';
     const res = await pg.query<{ id: string }>(
       `insert into auth.users (raw_user_meta_data)
-       values (jsonb_build_object('username', $1::text))
+       values (jsonb_build_object(
+         'username', $1::text,
+         'first_name', $2::text,
+         'last_name', $3::text
+       ))
        returning id`,
-      [username],
+      [username, first, last],
     );
     return res.rows[0].id;
   };

@@ -13,7 +13,8 @@
 
 export const PROFILE_FIELDS = [
   // --- Basic info -----------------------------------------------------------
-  { key: 'name', group: 'basic', label: 'Name' },
+  { key: 'first_name', group: 'basic', label: 'First name' },
+  { key: 'last_name', group: 'basic', label: 'Last name' },
   { key: 'school', group: 'basic', label: 'School' },
   { key: 'societies', group: 'basic', label: 'Societies / activities' },
   { key: 'major', group: 'basic', label: 'Major' },
@@ -55,6 +56,35 @@ export function fieldsInGroup(group: FieldGroup) {
 
 export function labelFor(key: ProfileField): string {
   return PROFILE_FIELDS.find((f) => f.key === key)!.label;
+}
+
+/**
+ * The only profile fields a user must fill in. Everything else is optional.
+ *
+ * Required is about completeness, not about sharing: both still carry a
+ * shareable toggle like any other field, and both can be withheld.
+ */
+export const REQUIRED_FIELDS = ['first_name', 'last_name'] as const;
+
+export function isRequired(key: ProfileField): boolean {
+  return (REQUIRED_FIELDS as readonly string[]).includes(key);
+}
+
+/**
+ * Full name for display, from a card or a profile.
+ *
+ * Returns null unless BOTH names are present, because half a name is not a
+ * name. Either one can be missing from a card when its owner withheld it, so
+ * callers fall back to the username rather than rendering "Alice -".
+ */
+export function fullName(
+  source: Partial<Record<'first_name' | 'last_name', string>>,
+): string | null {
+  const first = source.first_name?.trim();
+  const last = source.last_name?.trim();
+  if (!first || !last) return null;
+  if (first === EMPTY_SHARED_VALUE || last === EMPTY_SHARED_VALUE) return null;
+  return `${first} ${last}`;
 }
 
 /**

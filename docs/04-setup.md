@@ -32,7 +32,15 @@ stripping rather than a build step. Developed against Node 24.
    `pg_cron`. Database → Extensions. `pg_cron` must be enabled on the
    `postgres` database.
 
-4. Apply the migrations in order:
+4. Apply the migrations in order.
+
+   **If you have already applied an earlier version of these files to a real
+   database, reset it rather than re-running them.** The answers of 23 Sep 2026
+   changed `0001` and `0002` in place: `name` became `first_name` and
+   `last_name`, `discord_id` was added, and two functions changed their return
+   type, which Postgres will not do through `create or replace`. Editing
+   applied migrations is normally forbidden, and this was only safe because no
+   database had them yet. From here they are append-only.
 
    ```
    supabase link --project-ref <ref>

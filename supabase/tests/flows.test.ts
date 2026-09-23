@@ -15,15 +15,15 @@ before(async () => {
   alice = await db.createUser('alice');
   bob = await db.createUser('bob');
 
-  await db.as(alice, `update public.profiles set name = 'Alice Alvarez'`);
-  await db.as(bob, `update public.profiles set name = 'Bob Birch'`);
+  await db.as(alice, `update public.profiles set first_name = 'Alice', last_name = 'Alvarez'`);
+  await db.as(bob, `update public.profiles set first_name = 'Bob', last_name = 'Birch'`);
 
   const minted = row<{ token: string }>(
     await db.as(alice, `select * from public.mint_qr_token(120)`),
   );
-  const id = row<{ open_qr_exchange: string }>(
-    await db.as(bob, `select public.open_qr_exchange($1)`, [minted.token]),
-  ).open_qr_exchange;
+  const id = row<{ exchange_id: string }>(
+    await db.as(bob, `select * from public.open_qr_exchange($1)`, [minted.token]),
+  ).exchange_id;
   await db.as(bob, `select public.confirm_exchange($1)`, [id]);
   await db.as(alice, `select public.confirm_exchange($1)`, [id]);
 
@@ -40,6 +40,15 @@ after(async () => {
 });
 
 describe('QR tokens', () => {
+  // Alice and Bob are already connected by the fixture above, and an
+  // already-connected pair is now turned away before the code is even spent.
+  // These tests need someone Alice has not met.
+  let stranger: string;
+
+  before(async () => {
+    stranger = await db.createUser('stranger', 'Sam', 'Stranger');
+  });
+
   test('a code is not a user id', async () => {
     const minted = row<{ token: string }>(
       await db.as(alice, `select * from public.mint_qr_token(120)`),
@@ -55,11 +64,11 @@ describe('QR tokens', () => {
     const minted = row<{ token: string }>(
       await db.as(alice, `select * from public.mint_qr_token(120)`),
     );
-    await db.as(bob, `select public.open_qr_exchange($1)`, [minted.token]);
+    await db.as(stranger, `select * from public.open_qr_exchange($1)`, [minted.token]);
 
     const err = await db.asExpectingFailure(
-      bob,
-      `select public.open_qr_exchange($1)`,
+      stranger,
+      `select * from public.open_qr_exchange($1)`,
       [minted.token],
     );
     assert.match(err, /expired or already used/);
@@ -75,8 +84,8 @@ describe('QR tokens', () => {
     );
 
     const err = await db.asExpectingFailure(
-      bob,
-      `select public.open_qr_exchange($1)`,
+      stranger,
+      `select * from public.open_qr_exchange($1)`,
       [minted.token],
     );
     assert.match(err, /expired or already used/);
@@ -92,14 +101,14 @@ describe('QR tokens', () => {
     assert.notEqual(first.token, second.token);
 
     const err = await db.asExpectingFailure(
-      bob,
-      `select public.open_qr_exchange($1)`,
+      stranger,
+      `select * from public.open_qr_exchange($1)`,
       [first.token],
     );
     assert.match(err, /expired or already used/);
 
     // The code currently on screen still works.
-    await db.as(bob, `select public.open_qr_exchange($1)`, [second.token]);
+    await db.as(stranger, `select * from public.open_qr_exchange($1)`, [second.token]);
   });
 
   test('you cannot scan your own code', async () => {
@@ -108,7 +117,7 @@ describe('QR tokens', () => {
     );
     const err = await db.asExpectingFailure(
       alice,
-      `select public.open_qr_exchange($1)`,
+      `select * from public.open_qr_exchange($1)`,
       [minted.token],
     );
     assert.match(err, /yourself/);
@@ -248,28 +257,41 @@ describe('reminder bounds', () => {
     assert.equal(undone.length, 0);
   });
 
-  test('the notification falls back to the username when the name was not shared', async () => {
-    // Bob stops sharing his name. The already-frozen field set still carries
-    // it, so this checks the blank-name fallback rather than consent.
-    await db.admin(
-      `update public.profiles set name = null where user_id = '${bob}'`,
+  test('the notification falls back to the username once sharing is revoked', async () => {
+    // First and last name are required, so they are never blank. They are
+    // still shareable fields, and revocation is immediate, so a notification
+    // has to stop using the name the moment the toggle goes off.
+    await db.as(
+      bob,
+      `update public.profile_field_shares set shareable = false where field = 'last_name'`,
     );
+
     const name = row<{ display_name_for: string }>(
       await db.admin(`select public.display_name_for('${bob}', '${alice}')`),
     );
-    assert.equal(name.display_name_for, 'bob');
-
-    await db.admin(
-      `update public.profiles set name = 'Bob Birch' where user_id = '${bob}'`,
+    assert.equal(
+      name.display_name_for,
+      'bob',
+      'half a name is not a name: revoking either part falls back to the username',
     );
+
+    await db.as(
+      bob,
+      `update public.profile_field_shares set shareable = true where field = 'last_name'`,
+    );
+
+    const restored = row<{ display_name_for: string }>(
+      await db.admin(`select public.display_name_for('${bob}', '${alice}')`),
+    );
+    assert.equal(restored.display_name_for, 'Bob Birch', 'turning it back on restores it');
   });
 
-  test('the notification never uses a name that was not shared', async () => {
-    await db.admin(
-      `update public.connections
-          set shared_fields = array_remove(shared_fields, 'name'::public.profile_field)
-        where owner_id = '${alice}'`,
+  test('the notification never uses a name that is not being shared', async () => {
+    await db.as(
+      bob,
+      `update public.profile_field_shares set shareable = false where field = 'first_name'`,
     );
+
     const name = row<{ display_name_for: string }>(
       await db.admin(`select public.display_name_for('${bob}', '${alice}')`),
     );
@@ -279,11 +301,48 @@ describe('reminder bounds', () => {
       'a withheld name must not leak through a push notification',
     );
 
-    await db.admin(
-      `update public.connections
-          set shared_fields = shared_fields || 'name'::public.profile_field
-        where owner_id = '${alice}'`,
+    await db.as(
+      bob,
+      `update public.profile_field_shares set shareable = true where field = 'first_name'`,
     );
+  });
+
+  test('a follow-up marked done frees the slot for a new reminder', async () => {
+    await db.as(alice, `select public.set_reminder($1, 1, 0)`, [aliceConn]);
+    await db.admin(
+      `update public.reminders set fired_at = now() where connection_id = '${aliceConn}'`,
+    );
+    await db.as(alice, `select public.complete_follow_up($1)`, [aliceConn]);
+
+    const done = rows(
+      await db.as(alice, `select reminder_id from public.undone_follow_ups`),
+    );
+    assert.equal(done.length, 0, 'completing it clears the undone list');
+
+    // The slot is free: a new reminder behaves exactly like a first one.
+    await db.as(alice, `select public.set_reminder($1, 2, 0)`, [aliceConn]);
+
+    const r = row<{ days: number; fired_at: unknown; done_at: unknown; n: number }>(
+      await db.admin(
+        `select days, fired_at, done_at,
+                (select count(*)::int from public.reminders
+                  where connection_id = '${aliceConn}') as n
+           from public.reminders where connection_id = '${aliceConn}'`,
+      ),
+    );
+    assert.equal(Number(r.n), 1, 'still one slot, not an accumulating history');
+    assert.equal(Number(r.days), 2);
+    assert.equal(r.fired_at, null, 'the new reminder has not fired');
+    assert.equal(r.done_at, null, 'and is not carrying the old done stamp');
+  });
+
+  test('completing someone else\'s follow-up is refused', async () => {
+    const err = await db.asExpectingFailure(
+      bob,
+      `select public.complete_follow_up($1)`,
+      [aliceConn],
+    );
+    assert.match(err, /connection not found/);
   });
 });
 
@@ -452,5 +511,121 @@ describe('1:1 requests', () => {
       /row-level security/i,
       'the scheduling chat only opens after approval',
     );
+  });
+});
+
+describe('declining a 1:1', () => {
+  let declined: string;
+
+  test('an expired request stays in the list', async () => {
+    // The contrast case for the test below. Someone who agreed to meet and
+    // then ran out of time should be told, so expiry is visible.
+    const visible = rows<{ status: string }>(
+      await db.as(alice, `select status from public.visible_one_on_ones`),
+    );
+    assert.ok(
+      visible.some((r) => r.status === 'expired'),
+      'expired requests remain listed',
+    );
+  });
+
+  test('declining removes it from the recipient\'s list', async () => {
+    declined = row<{ id: string }>(
+      await db.admin(
+        `select id from public.one_on_one_requests where status = 'pending' limit 1`,
+      ),
+    ).id;
+
+    const before = rows(
+      await db.as(alice, `select id from public.visible_one_on_ones where id = '${declined}'`),
+    );
+    assert.equal(before.length, 1, 'it is listed while pending');
+
+    // Alice is the recipient of the request Bob sent after the expiry.
+    await db.as(alice, `select public.respond_one_on_one($1, false)`, [declined]);
+
+    const after = rows(
+      await db.as(alice, `select id from public.visible_one_on_ones where id = '${declined}'`),
+    );
+    assert.equal(after.length, 0, 'a declined request silently disappears');
+  });
+
+  test('and it sends no push notification', async () => {
+    const n = row<{ n: number }>(
+      await db.admin(
+        `select count(*)::int as n from public.push_outbox
+          where data ->> 'request_id' = '${declined}'
+            and data ->> 'kind' = 'one_on_one_response'`,
+      ),
+    );
+    assert.equal(
+      Number(n.n),
+      0,
+      'turning someone down should not come with an announcement',
+    );
+  });
+
+  test('but approving one still does notify', async () => {
+    const fresh = row<{ request_one_on_one: string }>(
+      await db.as(bob, `select public.request_one_on_one($1)`, [bobConn]),
+    );
+    void fresh;
+    const id = row<{ id: string }>(
+      await db.admin(
+        `select id from public.one_on_one_requests
+          where status = 'pending' order by created_at desc limit 1`,
+      ),
+    ).id;
+
+    await db.as(alice, `select public.respond_one_on_one($1, true)`, [id]);
+
+    const push = row<{ user_id: string; body: string }>(
+      await db.admin(
+        `select user_id, body from public.push_outbox order by created_at desc limit 1`,
+      ),
+    );
+    assert.equal(push.user_id, bob);
+    assert.match(push.body, /approved your 1:1 request/);
+
+    // Put it back to declined so the later tests see a clean slate.
+    await db.admin(
+      `update public.one_on_one_requests set status = 'declined' where id = '${id}'`,
+    );
+  });
+
+  test('and from the requester\'s list too', async () => {
+    const seen = rows(
+      await db.as(bob, `select id from public.visible_one_on_ones where id = '${declined}'`),
+    );
+    assert.equal(
+      seen.length,
+      0,
+      'it does not sit in the sender\'s list reading "declined"',
+    );
+  });
+
+  test('the row is kept, it is just never listed', async () => {
+    const r = row<{ status: string }>(
+      await db.admin(
+        `select status from public.one_on_one_requests where id = '${declined}'`,
+      ),
+    );
+    assert.equal(
+      r.status,
+      'declined',
+      'keeping the row is what frees the pair to try again and leaves a record',
+    );
+  });
+
+  test('either person can send a new request afterwards', async () => {
+    const r = row<{ request_one_on_one: string }>(
+      await db.as(alice, `select public.request_one_on_one($1)`, [aliceConn]),
+    );
+    assert.ok(r.request_one_on_one);
+
+    const visible = rows<{ status: string }>(
+      await db.as(bob, `select status from public.visible_one_on_ones`),
+    );
+    assert.ok(visible.some((x) => x.status === 'pending'), 'the new one is listed');
   });
 });

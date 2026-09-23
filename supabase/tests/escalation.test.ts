@@ -23,7 +23,7 @@ before(async () => {
   await db.as(
     alice,
     `update public.profiles
-        set name = 'Alice Alvarez',
+        set first_name = 'Alice', last_name = 'Alvarez',
             school = 'Brown',
             phone = '+15550100',
             personal_email = 'alice@personal.example'`,
@@ -37,9 +37,9 @@ before(async () => {
   const minted = row<{ token: string }>(
     await db.as(alice, `select * from public.mint_qr_token(120)`),
   );
-  const id = row<{ open_qr_exchange: string }>(
-    await db.as(bob, `select public.open_qr_exchange($1)`, [minted.token]),
-  ).open_qr_exchange;
+  const id = row<{ exchange_id: string }>(
+    await db.as(bob, `select * from public.open_qr_exchange($1)`, [minted.token]),
+  ).exchange_id;
   await db.as(bob, `select public.confirm_exchange($1)`, [id]);
   await db.as(alice, `select public.confirm_exchange($1)`, [id]);
 
@@ -63,22 +63,22 @@ describe('widening your own connection row', () => {
     assert.equal(card.personal_email, undefined);
   });
 
-  test('Bob cannot add a field to his own shared_fields', async () => {
+  test('Bob cannot rewrite the record of what was shared', async () => {
     const err = await db.asExpectingFailure(
       bob,
       `update public.connections
-          set shared_fields = shared_fields || 'phone'::public.profile_field
+          set fields_at_exchange = fields_at_exchange || 'phone'::public.profile_field
         where id = $1`,
       [bobConn],
     );
     assert.match(err, /permission denied/i);
   });
 
-  test('Bob cannot replace shared_fields wholesale', async () => {
+  test('Bob cannot replace that record wholesale', async () => {
     const err = await db.asExpectingFailure(
       bob,
       `update public.connections
-          set shared_fields = enum_range(null::public.profile_field)
+          set fields_at_exchange = enum_range(null::public.profile_field)
         where id = $1`,
       [bobConn],
     );
@@ -120,7 +120,7 @@ describe('widening your own connection row', () => {
     const carol = await db.createUser('carol');
     const err = await db.asExpectingFailure(
       bob,
-      `insert into public.connections (owner_id, other_id, met_via, shared_fields)
+      `insert into public.connections (owner_id, other_id, met_via, fields_at_exchange)
        values ($1, $2, 'qr', enum_range(null::public.profile_field))`,
       [bob, carol],
     );
@@ -220,9 +220,9 @@ describe('the exchange state machine', () => {
     const minted = row<{ token: string }>(
       await db.as(alice, `select * from public.mint_qr_token(120)`),
     );
-    const id = row<{ open_qr_exchange: string }>(
-      await db.as(bob, `select public.open_qr_exchange($1)`, [minted.token]),
-    ).open_qr_exchange;
+    const id = row<{ exchange_id: string }>(
+      await db.as(bob, `select * from public.open_qr_exchange($1)`, [minted.token]),
+    ).exchange_id;
 
     const err = await db.asExpectingFailure(
       bob,
@@ -233,12 +233,15 @@ describe('the exchange state machine', () => {
   });
 
   test('a client cannot forge the other side\'s confirmation', async () => {
+    // A fresh pair: Alice and Bob already know each other, and an
+    // already-connected pair never opens an exchange at all.
+    const erin = await db.createUser('erin', 'Erin', 'East');
     const minted = row<{ token: string }>(
-      await db.as(alice, `select * from public.mint_qr_token(120)`),
+      await db.as(erin, `select * from public.mint_qr_token(120)`),
     );
-    const id = row<{ open_qr_exchange: string }>(
-      await db.as(bob, `select public.open_qr_exchange($1)`, [minted.token]),
-    ).open_qr_exchange;
+    const id = row<{ exchange_id: string }>(
+      await db.as(bob, `select * from public.open_qr_exchange($1)`, [minted.token]),
+    ).exchange_id;
 
     // Bob confirms for himself, which is allowed.
     await db.as(bob, `select public.confirm_exchange($1)`, [id]);
@@ -278,38 +281,38 @@ describe('reading other people directly', () => {
     assert.equal(seen.length, 0);
   });
 
-  test('the projection refuses a field set the caller did not earn', async () => {
-    // The function is granted to `authenticated`, because the views run as
-    // their caller. So a client can invoke it directly with arguments of its
-    // own choosing, and it has to defend itself rather than trust the view.
-    const err = await db.asExpectingFailure(
-      bob,
-      `select public.project_shared_profile($1, array['phone']::public.profile_field[])`,
-      [alice],
-    );
-    assert.match(err, /not authorised/i);
-  });
-
   test('the projection refuses a profile the caller has no connection to', async () => {
-    const dana = await db.createUser('dana');
+    // The function is granted to `authenticated`, because the views run as
+    // their caller. So a client can invoke it directly, and it has to defend
+    // itself rather than trust the view that normally calls it.
+    const dana = await db.createUser('dana', 'Dana', 'Doe');
     const err = await db.asExpectingFailure(
       bob,
-      `select public.project_shared_profile($1, array['name']::public.profile_field[])`,
+      `select public.project_shared_profile($1)`,
       [dana],
     );
     assert.match(err, /not authorised/i);
   });
 
-  test('but the field set the caller did earn still projects', async () => {
+  test('the caller cannot ask for a field set of its own choosing', async () => {
+    // There is no field-list argument any more. Visibility is decided entirely
+    // by the subject's own toggles, so there is nothing for a caller to widen.
+    const err = await db.asExpectingFailure(
+      bob,
+      `select public.project_shared_profile($1, array['phone']::public.profile_field[])`,
+      [alice],
+    );
+    assert.match(err, /does not exist/i);
+  });
+
+  test('a connected caller gets exactly what the subject currently shares', async () => {
     const card = row<{ project_shared_profile: Record<string, string> }>(
-      await db.as(
-        bob,
-        `select public.project_shared_profile($1, array['school']::public.profile_field[])`,
-        [alice],
-      ),
+      await db.as(bob, `select public.project_shared_profile($1)`, [alice]),
     ).project_shared_profile;
 
     assert.equal(card.school, 'Brown');
+    assert.equal(card.phone, undefined, 'still bounded by Alice\'s own toggles');
+    assert.equal(card.personal_email, undefined);
   });
 
   test('and the contacts list still works end to end', async () => {
@@ -317,7 +320,8 @@ describe('reading other people directly', () => {
       await db.as(bob, `select card from public.contact_cards`),
     ).card;
 
-    assert.equal(card.name, 'Alice Alvarez');
+    assert.equal(card.first_name, 'Alice');
+    assert.equal(card.last_name, 'Alvarez');
     assert.equal(card.phone, undefined);
   });
 });
