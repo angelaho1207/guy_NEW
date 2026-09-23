@@ -1,0 +1,21 @@
+{
+  "name": "guy",
+  "private": true,
+  "version": "0.0.1",
+  "description": "Guy - consent-based, tap-to-share networking app",
+  "workspaces": [
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=22.6"
+  },
+  "scripts": {
+    "test": "node --test \"supabase/tests/**/*.test.ts\" \"packages/shared/test/**/*.test.ts\"",
+    "test:db": "node --test \"supabase/tests/**/*.test.ts\"",
+    "test:unit": "node --test \"packages/shared/test/**/*.test.ts\""
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.5.8"
+  },
+  "type": "module"
+}
