@@ -4,6 +4,7 @@ import { asUser } from '@/lib/db';
 import { currentUser } from '@/lib/session';
 import { Card, cardName, initials, type ContactCard } from '@/components/Card';
 import { ReminderForm } from '@/components/ReminderForm';
+import { toDateValue, formatDate, formatInstant } from '@/lib/dates';
 import {
   addNote,
   saveContext,
@@ -21,7 +22,7 @@ type Contact = {
   card: ContactCard;
   met_via: 'qr' | 'uwb';
   how_we_met: string | null;
-  how_we_met_on: string | null;
+  how_we_met_on: Date | string | null;
   want_follow_up: boolean | null;
   follow_up_topic: string | null;
   created_at: string;
@@ -30,7 +31,7 @@ type Contact = {
 type Note = {
   id: string;
   body: string;
-  noted_on: string;
+  noted_on: Date | string;
   highlighted: boolean;
 };
 
@@ -101,10 +102,17 @@ export default async function ContactPage({
           <h1 style={{ margin: 0 }}>{name}</h1>
           <p className="tiny" style={{ margin: 0 }}>
             @{contact.username} · met by {contact.met_via === 'qr' ? 'QR code' : 'tap'} on{' '}
-            {new Date(contact.how_we_met_on ?? contact.created_at).toLocaleDateString(
-              undefined,
-              { month: 'long', day: 'numeric', year: 'numeric' },
-            )}
+            {contact.how_we_met_on
+              ? formatDate(contact.how_we_met_on, {
+                  month: 'long',
+                  day: 'numeric',
+                  year: 'numeric',
+                })
+              : formatInstant(contact.created_at, {
+                  month: 'long',
+                  day: 'numeric',
+                  year: 'numeric',
+                })}
           </p>
         </div>
       </div>
@@ -142,10 +150,9 @@ export default async function ContactPage({
         <label className="field">
           <span className="field-label">Date</span>
           <input
-            type="text"
+            type="date"
             name="how_we_met_on"
-            defaultValue={contact.how_we_met_on ?? ''}
-            placeholder="YYYY-MM-DD"
+            defaultValue={toDateValue(contact.how_we_met_on)}
           />
         </label>
 
@@ -212,11 +219,7 @@ export default async function ContactPage({
           <div className="note" key={n.id} data-highlighted={n.highlighted}>
             <div className="note-head">
               <span>
-                {new Date(n.noted_on).toLocaleDateString(undefined, {
-                  month: 'short',
-                  day: 'numeric',
-                  year: 'numeric',
-                })}
+                {formatDate(n.noted_on)}
               </span>
               <form action={toggleHighlight}>
                 <input type="hidden" name="note_id" value={n.id} />

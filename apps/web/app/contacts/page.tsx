@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { asUser } from '@/lib/db';
 import { currentUser } from '@/lib/session';
 import { cardName, initials, type ContactCard } from '@/components/Card';
+import { formatDate, formatInstant } from '@/lib/dates';
 
 export const dynamic = 'force-dynamic';
 
@@ -10,9 +11,9 @@ type Row = {
   username: string;
   card: ContactCard;
   how_we_met: string | null;
-  how_we_met_on: string | null;
+  how_we_met_on: Date | string | null;
   want_follow_up: boolean | null;
-  created_at: string;
+  created_at: Date | string;
   note_count: number;
   has_reminder: boolean;
 };
@@ -93,7 +94,12 @@ export default async function ContactsPage() {
   );
 }
 
-function metWhen(metOn: string | null, created: string) {
-  const date = new Date(metOn ?? created);
-  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+/**
+ * `how_we_met_on` is a day, with no time zone, so it is read in UTC. Falling
+ * back to `created_at` means falling back to a real instant, which is read
+ * locally. Treating them the same shifts one of them by a day.
+ */
+function metWhen(metOn: Date | string | null, created: Date | string) {
+  const options = { month: 'short' as const, day: 'numeric' as const };
+  return metOn ? formatDate(metOn, options) : formatInstant(created, options);
 }

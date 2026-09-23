@@ -3,13 +3,14 @@
 import { useActionState, useState } from 'react';
 import { sendMessage, acceptTime } from '@/app/actions';
 import { windowsFromApproval, canPropose, chatIsOpen, type OneOnOneStatus } from '@guy/shared';
+import { toInstantValue } from '@/lib/dates';
 
 type Message = {
   id: string;
   sender_id: string;
   body: string | null;
-  proposed_for: string | null;
-  created_at: string;
+  proposed_for: Date | string | null;
+  created_at: Date | string;
 };
 
 /**
@@ -113,7 +114,11 @@ export function Scheduler({
                   {!mine && open && verdict?.ok && (
                     <form action={accept} style={{ marginTop: 8 }}>
                       <input type="hidden" name="request_id" value={requestId} />
-                      <input type="hidden" name="when" value={m.proposed_for!} />
+                      <input
+                        type="hidden"
+                        name="when"
+                        value={toInstantValue(m.proposed_for)}
+                      />
                       <button className="btn btn-sm btn-primary" disabled={accepting}>
                         Accept this time
                       </button>
