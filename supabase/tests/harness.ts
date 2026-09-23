@@ -33,6 +33,10 @@ export type Db = {
   as(uid: string, sql: string, params?: unknown[]): Promise<any>;
   /** Like `as`, but resolves to the error message instead of throwing. */
   asExpectingFailure(uid: string, sql: string, params?: unknown[]): Promise<string>;
+  /** Run SQL as a logged-out visitor: the `anon` role, with no auth.uid(). */
+  asAnon(sql: string, params?: unknown[]): Promise<any>;
+  /** Like `asAnon`, but resolves to the error message instead of throwing. */
+  asAnonExpectingFailure(sql: string, params?: unknown[]): Promise<string>;
   /**
    * Create an auth user + profile, returning the new user id.
    * First and last name are required profile content, so they are supplied
@@ -46,6 +50,13 @@ export async function boot(): Promise<Db> {
   const pg = await PGlite.create({ extensions: { citext, pgcrypto } });
 
   await pg.exec(AUTH_SHIM);
+
+  // Supabase's roles carry `extensions` on their search_path, so migrations
+  // can use extension types and functions while being applied. Individual
+  // functions still pin `search_path = public`, which is the point: anything
+  // that needs an extension at RUNTIME has to say so, and will fail here
+  // exactly as it fails in production if it does not.
+  await pg.exec(`set search_path to public, extensions`);
 
   const files = readdirSync(migrationsDir).filter((f) => f.endsWith('.sql')).sort();
   for (const file of files) {
@@ -79,6 +90,25 @@ export async function boot(): Promise<Db> {
     }
   };
 
+  const asAnon = async (sql: string, params?: unknown[]) => {
+    await reset();
+    await pg.exec(`set role anon`);
+    try {
+      return params ? await pg.query(sql, params) : await pg.exec(sql);
+    } finally {
+      await pg.exec(`reset role`);
+    }
+  };
+
+  const asAnonExpectingFailure = async (sql: string, params?: unknown[]) => {
+    try {
+      await asAnon(sql, params);
+    } catch (err: any) {
+      return String(err.message ?? err);
+    }
+    throw new Error('expected the statement to be rejected, but it succeeded');
+  };
+
   const asExpectingFailure = async (uid: string, sql: string, params?: unknown[]) => {
     try {
       await as(uid, sql, params);
@@ -108,6 +138,8 @@ export async function boot(): Promise<Db> {
   return {
     admin,
     as,
+    asAnon,
+    asAnonExpectingFailure,
     asExpectingFailure,
     createUser,
     close: () => pg.close(),

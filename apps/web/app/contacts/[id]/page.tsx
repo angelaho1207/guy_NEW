@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { asUser } from '@/lib/db';
-import { currentUser } from '@/lib/session';
+import { requireUser } from '@/lib/session';
 import { Card, cardName, initials, type ContactCard } from '@/components/Card';
 import { ReminderForm } from '@/components/ReminderForm';
 import { toDateValue, formatDate, formatInstant } from '@/lib/dates';
@@ -41,7 +41,7 @@ export default async function ContactPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const me = await currentUser();
+  const me = await requireUser();
 
   const [contact] = await asUser<Contact>(
     me.user_id,

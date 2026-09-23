@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { asUser } from '@/lib/db';
-import { currentUser } from '@/lib/session';
+import { requireUser } from '@/lib/session';
 import { completeFollowUp } from '@/app/actions';
 import { cardName, initials, type ContactCard } from '@/components/Card';
 
@@ -15,7 +15,7 @@ type Row = {
 };
 
 export default async function FollowUpsPage() {
-  const me = await currentUser();
+  const me = await requireUser();
 
   const rows = await asUser<Row>(
     me.user_id,

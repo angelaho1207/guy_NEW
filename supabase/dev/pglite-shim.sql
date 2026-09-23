@@ -6,6 +6,14 @@
 --
 -- Everything downstream of these three things is the real shipped SQL.
 
+-- Supabase puts extensions in their own schema, not in `public`. Matching that
+-- matters: every function pins `search_path = public`, so anything living
+-- elsewhere is invisible to it. Installing pgcrypto here instead of letting
+-- 0001 put it in `public` is what makes that failure reproduce locally rather
+-- than only against a real project.
+create schema if not exists extensions;
+create extension if not exists pgcrypto with schema extensions;
+
 create schema if not exists auth;
 
 create table if not exists auth.users (
@@ -22,8 +30,13 @@ language sql stable as $shim$
   select nullif(current_setting('guy.test_uid', true), '')::uuid;
 $shim$;
 
+-- The two roles Supabase gives requests. `anon` is what a logged-out visitor
+-- gets when the browser sends only the publishable key, and it is the role the
+-- EXECUTE lockdown in 0006 is really about.
 create role authenticated nologin;
+create role anon nologin;
 grant usage on schema auth to authenticated;
+grant usage on schema auth to anon;
 
 -- pg_cron cannot load in WASM. This records what would have been scheduled so
 -- a test can assert the jobs registered, and runs nothing. The job functions

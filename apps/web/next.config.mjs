@@ -1,8 +1,9 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // PGlite is a WASM build of Postgres. It must stay a real Node module on the
-  // server rather than being bundled.
-  serverExternalPackages: ['@electric-sql/pglite'],
+  // Both of these must stay real Node modules on the server rather than being
+  // bundled. PGlite is a WebAssembly build of Postgres, and `pg` loads `fs`
+  // conditionally at runtime in a way webpack cannot follow.
+  serverExternalPackages: ['@electric-sql/pglite', 'pg'],
   transpilePackages: ['@guy/shared'],
 
   webpack: (config, { nextRuntime }) => {
@@ -18,17 +19,21 @@ const nextConfig = {
       type: 'asset/source',
     });
 
-    // Next compiles instrumentation.ts for the edge runtime as well as for
-    // Node, even though register() returns immediately unless it is running on
-    // Node. Webpack still follows the import into lib/db.ts. Nothing here ever
-    // runs on edge, so PGlite is marked external rather than bundled.
+    // Next compiles instrumentation.ts for the edge runtime too, because the
+    // middleware runs there. Webpack follows the import into lib/db.ts and
+    // hits the database drivers, which cannot exist on edge.
+    //
+    // They are aliased to empty modules rather than marked external. An
+    // external would have webpack emit the package name as a bare identifier,
+    // producing a bundle that is not valid JavaScript. Nothing here ever runs
+    // on edge, so an empty module is exactly right.
     if (nextRuntime === 'edge') {
-      config.externals = [
-        ...(Array.isArray(config.externals)
-          ? config.externals
-          : [config.externals].filter(Boolean)),
-        '@electric-sql/pglite',
-      ];
+      config.resolve = config.resolve ?? {};
+      config.resolve.alias = {
+        ...(config.resolve.alias ?? {}),
+        '@electric-sql/pglite': false,
+        pg: false,
+      };
     }
 
     return config;

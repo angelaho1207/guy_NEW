@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { asUser } from '@/lib/db';
-import { currentUser } from '@/lib/session';
+import { requireUser } from '@/lib/session';
 import { respondOneOnOne } from '@/app/actions';
 
 export const dynamic = 'force-dynamic';
@@ -17,7 +17,7 @@ type Row = {
 };
 
 export default async function OneOnOnesPage() {
-  const me = await currentUser();
+  const me = await requireUser();
 
   const rows = await asUser<Row>(
     me.user_id,

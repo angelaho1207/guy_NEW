@@ -1,94 +1,112 @@
 import 'server-only';
 
-import { PGlite } from '@electric-sql/pglite';
-import { citext } from '@electric-sql/pglite/contrib/citext';
-import { pgcrypto } from '@electric-sql/pglite/contrib/pgcrypto';
-import { seed } from './seed';
-
-// Imported, not read from disk. See the note in next.config.mjs: files reached
-// only through fs do not travel into a deployed bundle. A test asserts this
-// list covers every migration, so adding one and forgetting it here fails
-// loudly rather than silently running an old schema.
-import shim from '../../../supabase/dev/pglite-shim.sql';
-import m0001 from '../../../supabase/migrations/0001_init.sql';
-import m0002 from '../../../supabase/migrations/0002_rls_and_functions.sql';
-import m0003 from '../../../supabase/migrations/0003_scheduled_jobs.sql';
-import m0004 from '../../../supabase/migrations/0004_exchange_method_nearby.sql';
-import m0005 from '../../../supabase/migrations/0005_presence.sql';
-
-const MIGRATIONS: [string, string][] = [
-  ['0001_init.sql', m0001],
-  ['0002_rls_and_functions.sql', m0002],
-  ['0003_scheduled_jobs.sql', m0003],
-  ['0004_exchange_method_nearby.sql', m0004],
-  ['0005_presence.sql', m0005],
-];
+import { Pool } from 'pg';
 
 /**
- * The dev database.
+ * Two backends, one interface.
  *
- * This runs the REAL migrations from supabase/migrations against a real
- * Postgres, compiled to WebAssembly and living inside the dev server. It is
- * not a mock and not a stub: row level security is enforced, the SECURITY
- * DEFINER functions are the shipped ones, and what you see on screen came
- * through the same consent projection that will run in production.
+ * **Supabase**, when `SUPABASE_DB_URL` is set. Real Postgres, real accounts,
+ * one database that two phones can both reach. This is the app.
  *
- * The point is that you can look at the app without creating a Supabase
- * project first. The cost is that it is in memory, so every restart is a fresh
- * database with fresh seed data. Nothing you type here survives.
+ * **The demo database**, when it is not. See `./pglite`. No account, no keys,
+ * no setup: clone and `npm run dev`.
  *
- * Two things are shimmed, both in supabase/dev/pglite-shim.sql: `auth.uid()`
- * reads a session variable instead of a JWT claim, and `cron.schedule()`
- * records rather than runs. See apps/web/README.md for how this is swapped for
- * a real Supabase project.
+ * The same migrations apply to both and the same SQL runs against both, so the
+ * demo is not a mock of the app. It is the app with a throwaway database.
+ *
+ * ## Why raw SQL rather than the Supabase client
+ *
+ * `supabase-js` speaks PostgREST and RPC, not SQL, so using it here would have
+ * meant rewriting every query in the app. Connecting to Postgres directly
+ * keeps every query that is already written and already tested.
+ *
+ * Losing the mobile story was the argument against this, and it turns out not
+ * to apply. The functions in `0002` and `0005` are granted to `authenticated`
+ * and are already reachable over PostgREST, so a phone can call
+ * `open_exchange` or `nearby_people` directly with `supabase-js` and no server
+ * code in between. What lives in this file is only how the web pages read.
+ *
+ * ## How row level security still applies
+ *
+ * Every query runs inside a transaction that first becomes the `authenticated`
+ * role and sets the request's JWT claims. That is what PostgREST itself does,
+ * which is why `auth.uid()` returns the right person and the policies behave
+ * exactly as they do in the tests. `set local` scopes both to the transaction,
+ * so a pooled connection handed to the next request carries nothing over.
  */
 
-let bootPromise: Promise<PGlite> | null = null;
+const CONNECTION_STRING = process.env.SUPABASE_DB_URL;
 
-async function boot(): Promise<PGlite> {
-  const pg = await PGlite.create({ extensions: { citext, pgcrypto } });
+export const usingSupabase = Boolean(CONNECTION_STRING);
 
-  await pg.exec(shim);
+// ---------------------------------------------------------------------------
+// Supabase
+// ---------------------------------------------------------------------------
 
-  for (const [name, source] of MIGRATIONS) {
-    // pg_cron cannot load in WASM. The job functions are still created and can
-    // be called by hand; only the scheduling is inert.
-    const sql = source.replace(/create extension if not exists pg_cron;/g, '');
-    try {
-      await pg.exec(sql);
-    } catch (err) {
-      throw new Error(`migration ${name} failed: ${(err as Error).message}`);
-    }
+function pool(): Pool {
+  const g = globalThis as { __guyPool?: Pool };
+  if (!g.__guyPool) {
+    g.__guyPool = new Pool({
+      connectionString: CONNECTION_STRING,
+      ssl: { rejectUnauthorized: false },
+      // Serverless functions are short lived and numerous, so hold few
+      // connections and release them quickly rather than exhausting the
+      // pooler.
+      max: 4,
+      idleTimeoutMillis: 10_000,
+      connectionTimeoutMillis: 10_000,
+    });
   }
+  return g.__guyPool;
+}
 
-  await seed(pg);
-  return pg;
+async function queryPostgres<T>(
+  uid: string | null,
+  sql: string,
+  params: unknown[],
+): Promise<T[]> {
+  const client = await pool().connect();
+  try {
+    await client.query('begin');
+    await client.query(`set local role ${uid ? 'authenticated' : 'anon'}`);
+    await client.query(`select set_config('request.jwt.claims', $1, true)`, [
+      JSON.stringify({ sub: uid, role: uid ? 'authenticated' : 'anon' }),
+    ]);
+
+    const res = await client.query(sql, params);
+    await client.query('commit');
+    return res.rows as T[];
+  } catch (err) {
+    await client.query('rollback').catch(() => undefined);
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+// ---------------------------------------------------------------------------
+// The demo database
+// ---------------------------------------------------------------------------
+
+type PGliteLike = {
+  exec(sql: string): Promise<unknown>;
+  query<T>(sql: string, params?: unknown[]): Promise<{ rows: T[] }>;
+};
+
+function demo(): Promise<PGliteLike> {
+  const g = globalThis as { __guyDb?: Promise<PGliteLike> };
+  // Imported lazily so the WebAssembly build is never loaded when a real
+  // database is configured, and parked on globalThis so a hot reload does not
+  // re-seed on every save.
+  if (!g.__guyDb) g.__guyDb = import('./pglite').then((m) => m.boot());
+  return g.__guyDb;
 }
 
 /**
- * Boot the database up front, from instrumentation.ts.
- *
- * Applying the migrations is seconds of blocking WASM work. Doing it inside a
- * request means blocking while Next is already streaming a response, which
- * fails for reasons that look nothing like a database problem.
- */
-export function warm(): Promise<PGlite> {
-  return db();
-}
-
-function db(): Promise<PGlite> {
-  // Next's dev server re-evaluates modules on edit, so the instance is parked
-  // on globalThis to survive a hot reload rather than re-seeding every save.
-  const g = globalThis as { __guyDb?: Promise<PGlite> };
-  if (!g.__guyDb) g.__guyDb = boot();
-  bootPromise = g.__guyDb;
-  return bootPromise;
-}
-
-/**
- * PGlite is a single connection, and acting as a user means setting a session
- * variable before the query. Two overlapping requests would otherwise read
- * each other's identity, so every query takes its turn.
+ * The demo database is one connection and identity is a session variable, so
+ * two overlapping requests would otherwise read each other's user. Queries
+ * take their turn. The Postgres pool needs none of this, because each query
+ * gets its own connection and its own transaction.
  */
 let queue: Promise<unknown> = Promise.resolve();
 
@@ -101,17 +119,17 @@ function serialize<T>(work: () => Promise<T>): Promise<T> {
   return run;
 }
 
-/** Run a query as `uid`, with row level security enforced. */
-export function asUser<T = Record<string, unknown>>(
-  uid: string,
+function queryDemo<T>(
+  uid: string | null,
   sql: string,
-  params: unknown[] = [],
+  params: unknown[],
+  asRole: 'authenticated' | 'anon' | 'owner',
 ): Promise<T[]> {
   return serialize(async () => {
-    const pg = await db();
+    const pg = await demo();
     await pg.exec(`reset role`);
-    await pg.query(`select set_config('guy.test_uid', $1, false)`, [uid]);
-    await pg.exec(`set role authenticated`);
+    await pg.query(`select set_config('guy.test_uid', $1, false)`, [uid ?? '']);
+    if (asRole !== 'owner') await pg.exec(`set role ${asRole}`);
     try {
       const res = await pg.query<T>(sql, params);
       return res.rows;
@@ -121,23 +139,76 @@ export function asUser<T = Record<string, unknown>>(
   });
 }
 
-/** Run a query with no user, bypassing RLS. Seeding and demo plumbing only. */
+// ---------------------------------------------------------------------------
+// The interface the app uses
+// ---------------------------------------------------------------------------
+
+/** Run a query as `uid`, with row level security enforced. */
+export function asUser<T = Record<string, unknown>>(
+  uid: string,
+  sql: string,
+  params: unknown[] = [],
+): Promise<T[]> {
+  return usingSupabase
+    ? queryPostgres<T>(uid, sql, params)
+    : queryDemo<T>(uid, sql, params, 'authenticated');
+}
+
+/**
+ * Run a query with no signed-in user.
+ *
+ * Against Supabase this is the `anon` role, which since migration 0006 can
+ * reach almost nothing. It is not a back door; anything a person is doing goes
+ * through `asUser`.
+ *
+ * Against the demo database it runs as the owner, because the demo has no real
+ * accounts and the user switcher has to be able to list them.
+ */
 export function asAdmin<T = Record<string, unknown>>(
   sql: string,
   params: unknown[] = [],
 ): Promise<T[]> {
-  return serialize(async () => {
-    const pg = await db();
-    await pg.exec(`reset role`);
-    await pg.query(`select set_config('guy.test_uid', '', false)`);
-    const res = await pg.query<T>(sql, params);
-    return res.rows;
-  });
+  return usingSupabase
+    ? queryPostgres<T>(null, sql, params)
+    : queryDemo<T>(null, sql, params, 'owner');
 }
 
-/** First row, or null. */
-export async function one<T = Record<string, unknown>>(
-  rows: Promise<T[]>,
-): Promise<T | null> {
-  return (await rows)[0] ?? null;
+/**
+ * Runs a query with no role set, as the connection's own user.
+ *
+ * This bypasses row level security, so there is exactly one caller: resolving
+ * a username to the address Supabase Auth knows it by, during sign-in. That
+ * lookup has to happen before anyone is signed in, and `auth.users` is not
+ * readable by `anon` or by `authenticated`.
+ *
+ * Do not reach for this for anything else. Anything a person is doing goes
+ * through `asUser`, which is what makes the policies mean something.
+ */
+export function asOwner<T = Record<string, unknown>>(
+  sql: string,
+  params: unknown[] = [],
+): Promise<T[]> {
+  if (!usingSupabase) {
+    return queryDemo<T>(null, sql, params, 'owner');
+  }
+  return pool()
+    .query(sql, params)
+    .then((res) => res.rows as T[]);
+}
+
+/**
+ * Called once at startup from instrumentation.ts.
+ *
+ * Booting the demo database is seconds of blocking WebAssembly work, and doing
+ * it inside a request means blocking while Next is already streaming a
+ * response, which fails for reasons that look nothing like a database problem.
+ * With a real database configured there is nothing to warm, so this just
+ * proves the connection works and fails loudly at startup if it does not.
+ */
+export async function warm(): Promise<void> {
+  if (usingSupabase) {
+    await queryPostgres(null, 'select 1 as ok', []);
+    return;
+  }
+  await demo();
 }

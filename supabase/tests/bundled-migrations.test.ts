@@ -3,7 +3,7 @@
 // A deployed serverless bundle contains the files the build traced through
 // imports. `supabase/` sits outside the app and used to be reached with fs,
 // which worked locally and produced a bundle that could not boot. So
-// apps/web/lib/db.ts imports each migration as a string instead.
+// apps/web/lib/pglite.ts imports each migration as a string instead.
 //
 // That trades one failure for another: the list is now written by hand, and a
 // migration left out of it means the web app quietly runs an old schema. This
@@ -19,7 +19,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = join(here, '..', '..');
 const migrationsDir = join(repoRoot, 'supabase', 'migrations');
 const dbSource = readFileSync(
-  join(repoRoot, 'apps', 'web', 'lib', 'db.ts'),
+  join(repoRoot, 'apps', 'web', 'lib', 'pglite.ts'),
   'utf8',
 );
 
@@ -33,10 +33,10 @@ describe('the web app bundles every migration', () => {
   });
 
   for (const file of onDisk) {
-    test(`${file} is imported by apps/web/lib/db.ts`, () => {
+    test(`${file} is imported by apps/web/lib/pglite.ts`, () => {
       assert.ok(
         dbSource.includes(`migrations/${file}'`),
-        `apps/web/lib/db.ts does not import ${file}. Add the import and add it to MIGRATIONS, or the deployed app will run without it.`,
+        `apps/web/lib/pglite.ts does not import ${file}. Add the import and add it to MIGRATIONS, or the deployed app will run without it.`,
       );
     });
 

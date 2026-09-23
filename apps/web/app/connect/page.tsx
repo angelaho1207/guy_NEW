@@ -1,5 +1,5 @@
 import { asUser } from '@/lib/db';
-import { currentUser } from '@/lib/session';
+import { requireUser } from '@/lib/session';
 import { ScanBox } from '@/components/ScanBox';
 import { ConfirmPrompt } from '@/components/ConfirmPrompt';
 import { CodePanel } from '@/components/CodePanel';
@@ -16,7 +16,7 @@ type Pending = {
 };
 
 export default async function ConnectPage() {
-  const me = await currentUser();
+  const me = await requireUser();
 
   // name_for() pins the viewer to the caller, so this shows what you are
   // allowed to call them and nothing more. A prompt that cannot say who it is

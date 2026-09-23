@@ -5,7 +5,7 @@ import { redirect } from 'next/navigation';
 import { cookies } from 'next/headers';
 import QRCode from 'qrcode';
 import { asUser } from '@/lib/db';
-import { currentUser, SESSION_COOKIE } from '@/lib/session';
+import { requireUser, currentUser, SESSION_COOKIE } from '@/lib/session';
 import { PROFILE_FIELDS } from '@guy/shared';
 import { toInstantValue } from '@/lib/dates';
 
@@ -34,7 +34,7 @@ export async function switchUser(formData: FormData) {
 // --- Profile ---------------------------------------------------------------
 
 export async function saveProfile(_prev: unknown, formData: FormData) {
-  const me = await currentUser();
+  const me = await requireUser();
 
   const columns = PROFILE_FIELDS.map((f) => f.key);
   const values = columns.map((key) => {
@@ -78,7 +78,7 @@ export async function saveProfile(_prev: unknown, formData: FormData) {
  * inner one, so the toggle would submit the whole profile instead.
  */
 export async function toggleShare(field: string, on: boolean) {
-  const me = await currentUser();
+  const me = await requireUser();
 
   await asUser(
     me.user_id,
@@ -94,7 +94,7 @@ export async function toggleShare(field: string, on: boolean) {
 // --- Connection notes and context -----------------------------------------
 
 export async function saveContext(formData: FormData) {
-  const me = await currentUser();
+  const me = await requireUser();
   const id = String(formData.get('connection_id'));
   const how = String(formData.get('how_we_met') ?? '').trim() || null;
   const on = String(formData.get('how_we_met_on') ?? '').trim() || null;
@@ -119,7 +119,7 @@ export async function saveContext(formData: FormData) {
 }
 
 export async function addNote(formData: FormData) {
-  const me = await currentUser();
+  const me = await requireUser();
   const id = String(formData.get('connection_id'));
   const body = String(formData.get('body') ?? '').trim();
   if (body === '') return;
@@ -134,7 +134,7 @@ export async function addNote(formData: FormData) {
 }
 
 export async function toggleHighlight(formData: FormData) {
-  const me = await currentUser();
+  const me = await requireUser();
   const noteId = String(formData.get('note_id'));
   const connectionId = String(formData.get('connection_id'));
 
@@ -150,7 +150,7 @@ export async function toggleHighlight(formData: FormData) {
 }
 
 export async function deleteNote(formData: FormData) {
-  const me = await currentUser();
+  const me = await requireUser();
   const noteId = String(formData.get('note_id'));
   const connectionId = String(formData.get('connection_id'));
 
@@ -164,7 +164,7 @@ export async function deleteNote(formData: FormData) {
 // --- Reminders -------------------------------------------------------------
 
 export async function setReminder(_prev: unknown, formData: FormData) {
-  const me = await currentUser();
+  const me = await requireUser();
   const id = String(formData.get('connection_id'));
   const days = Number(formData.get('days') ?? 0);
   const hours = Number(formData.get('hours') ?? 0);
@@ -185,7 +185,7 @@ export async function setReminder(_prev: unknown, formData: FormData) {
 }
 
 export async function clearReminder(formData: FormData) {
-  const me = await currentUser();
+  const me = await requireUser();
   const id = String(formData.get('connection_id'));
 
   await asUser(me.user_id, `delete from public.reminders where connection_id = $1`, [
@@ -197,7 +197,7 @@ export async function clearReminder(formData: FormData) {
 }
 
 export async function completeFollowUp(formData: FormData) {
-  const me = await currentUser();
+  const me = await requireUser();
   const id = String(formData.get('connection_id'));
 
   await asUser(me.user_id, `select public.complete_follow_up($1)`, [id]);
@@ -218,7 +218,7 @@ export async function completeFollowUp(formData: FormData) {
  * error boundary is the honest response.
  */
 export async function requestOneOnOne(formData: FormData) {
-  const me = await currentUser();
+  const me = await requireUser();
   const id = String(formData.get('connection_id'));
 
   const rows = await asUser<{ id: string }>(
@@ -235,7 +235,7 @@ export async function requestOneOnOne(formData: FormData) {
 }
 
 export async function respondOneOnOne(formData: FormData) {
-  const me = await currentUser();
+  const me = await requireUser();
   const id = String(formData.get('request_id'));
   const approve = String(formData.get('approve')) === 'true';
 
@@ -245,7 +245,7 @@ export async function respondOneOnOne(formData: FormData) {
 }
 
 export async function sendMessage(_prev: unknown, formData: FormData) {
-  const me = await currentUser();
+  const me = await requireUser();
   const id = String(formData.get('request_id'));
   const body = String(formData.get('body') ?? '').trim();
   const proposed = String(formData.get('proposed_for') ?? '').trim();
@@ -270,7 +270,7 @@ export async function sendMessage(_prev: unknown, formData: FormData) {
 }
 
 export async function acceptTime(_prev: unknown, formData: FormData) {
-  const me = await currentUser();
+  const me = await requireUser();
   const id = String(formData.get('request_id'));
   const when = String(formData.get('when'));
 
@@ -299,7 +299,7 @@ export async function acceptTime(_prev: unknown, formData: FormData) {
  * code on screen every time anything else caused a re-render.
  */
 export async function mintToken() {
-  const me = await currentUser();
+  const me = await requireUser();
   const rows = await asUser<{ token: string; expires_at: Date }>(
     me.user_id,
     `select * from public.mint_connect_token(120)`,
@@ -324,7 +324,7 @@ export async function mintToken() {
  * one browser.
  */
 export async function redeemToken(_prev: unknown, formData: FormData) {
-  const me = await currentUser();
+  const me = await requireUser();
   const token = String(formData.get('token') ?? '').trim();
 
   if (token === '') return { error: 'Paste a code first.' };
@@ -351,7 +351,7 @@ export async function redeemToken(_prev: unknown, formData: FormData) {
 }
 
 export async function confirmExchange(_prev: unknown, formData: FormData) {
-  const me = await currentUser();
+  const me = await requireUser();
   const id = String(formData.get('exchange_id'));
 
   try {
@@ -369,7 +369,7 @@ export async function confirmExchange(_prev: unknown, formData: FormData) {
 }
 
 export async function declineExchange(formData: FormData) {
-  const me = await currentUser();
+  const me = await requireUser();
   const id = String(formData.get('exchange_id'));
   await asUser(me.user_id, `select public.decline_exchange($1)`, [id]);
   revalidatePath('/connect');

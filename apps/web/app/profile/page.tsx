@@ -1,11 +1,11 @@
 import { asUser } from '@/lib/db';
-import { currentUser } from '@/lib/session';
+import { requireUser } from '@/lib/session';
 import { ProfileForm } from '@/components/ProfileForm';
 
 export const dynamic = 'force-dynamic';
 
 export default async function ProfilePage() {
-  const me = await currentUser();
+  const me = await requireUser();
 
   const [profile] = await asUser<Record<string, string | null>>(
     me.user_id,

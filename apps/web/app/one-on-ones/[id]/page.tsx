@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { asUser } from '@/lib/db';
-import { currentUser } from '@/lib/session';
+import { requireUser } from '@/lib/session';
 import { Scheduler } from '@/components/Scheduler';
 import { respondOneOnOne } from '@/app/actions';
 import type { OneOnOneStatus } from '@guy/shared';
@@ -24,7 +24,7 @@ export default async function OneOnOnePage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const me = await currentUser();
+  const me = await requireUser();
 
   const [req] = await asUser<Request>(
     me.user_id,
