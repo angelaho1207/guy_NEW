@@ -70,10 +70,13 @@ export async function saveProfile(_prev: unknown, formData: FormData) {
   return { ok: true as const };
 }
 
-export async function toggleShare(formData: FormData) {
+/**
+ * Takes plain arguments rather than FormData, because its button lives inside
+ * the profile form and a nested <form> is invalid HTML: the browser drops the
+ * inner one, so the toggle would submit the whole profile instead.
+ */
+export async function toggleShare(field: string, on: boolean) {
   const me = await currentUser();
-  const field = String(formData.get('field') ?? '');
-  const on = String(formData.get('on') ?? '') === 'true';
 
   await asUser(
     me.user_id,
