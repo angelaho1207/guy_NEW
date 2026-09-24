@@ -9,7 +9,7 @@ import {
   type ProfileField,
 } from '@guy/shared';
 
-export type ContactCard = Partial<Record<ProfileField | 'discord_id', string>>;
+export type ContactCard = Partial<Record<ProfileField, string>>;
 
 /**
  * Someone else's details, as the database chose to show them.
@@ -66,7 +66,7 @@ function Value({ field, card }: { field: ProfileField; card: ContactCard }) {
   }
 
   if (isHandleField(field)) {
-    const href = linkFor(field, raw, card.discord_id ?? null);
+    const href = linkFor(field, raw);
     const text = displayHandle(field, raw);
 
     // No link is deliberate, not a bug. A Discord username with no numeric id

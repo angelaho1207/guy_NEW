@@ -51,8 +51,6 @@ export async function saveProfile(_prev: unknown, formData: FormData) {
     return { error: 'First name and last name are required.' };
   }
 
-  const discordId = String(formData.get('discord_id') ?? '').trim() || null;
-
   const assignments = columns.map((c, i) => `${c} = $${i + 1}`).join(', ');
 
   try {
@@ -60,9 +58,8 @@ export async function saveProfile(_prev: unknown, formData: FormData) {
       me.user_id,
       `update public.profiles
           set ${assignments},
-              discord_id = $${columns.length + 1},
               updated_at = now()`,
-      [...values, discordId],
+      values,
     );
   } catch (err) {
     return { error: message(err) };

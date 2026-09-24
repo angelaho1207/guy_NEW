@@ -4,7 +4,8 @@
 //       else. Off hides the field from everyone immediately; on reveals it to
 //       everyone immediately, including people met while it was off.
 //   Q2  first and last name are required, and the only required fields
-//   Q3  sharing Discord carries the numeric id that makes it tappable
+//   Q3  Discord is a username and nothing else; the numeric id that once
+//       made it tappable was dropped in 0010
 //   Q6  tapping someone you already know says so and does nothing
 
 import { test, before, after, describe } from 'node:test';
@@ -160,46 +161,27 @@ describe('revoking consent after the fact', () => {
 });
 
 describe('Discord', () => {
-  test('sharing the username carries the id that makes it tappable', async () => {
-    await db.as(
-      alice,
-      `update public.profiles set discord = 'alicea', discord_id = '123456789012345678'`,
-    );
-
-    const card = await bobsCard();
-    assert.equal(card.discord, 'alicea');
-    assert.equal(card.discord_id, '123456789012345678');
+  test('the username shares like any other handle', async () => {
+    await db.as(alice, `update public.profiles set discord = 'alicea'`);
+    assert.equal((await bobsCard()).discord, 'alicea');
   });
 
-  test('without an id the username still shares, just not linkably', async () => {
-    await db.as(alice, `update public.profiles set discord_id = null`);
-
-    const card = await bobsCard();
-    assert.equal(card.discord, 'alicea');
-    assert.equal(card.discord_id, undefined);
-  });
-
-  test('withholding Discord withholds the id with it', async () => {
-    await db.as(alice, `update public.profiles set discord_id = '123456789012345678'`);
+  test('withholding it hides it, like any other handle', async () => {
     await setShare(alice, 'discord', false);
-
-    const card = await bobsCard();
-    assert.equal(card.discord, undefined);
-    assert.equal(
-      card.discord_id,
-      undefined,
-      'the id must never outlive the username it belongs to',
-    );
-
+    assert.equal((await bobsCard()).discord, undefined);
     await setShare(alice, 'discord', true);
   });
 
-  test('a non-numeric Discord id is rejected', async () => {
+  test('the user id it used to carry is gone from the schema', async () => {
+    // 0010 dropped the column. This is the guard that it stayed dropped: a
+    // reinstated column would start riding along in the projection again
+    // without anything else failing.
     const err = await db.asExpectingFailure(
       alice,
-      `update public.profiles set discord_id = 'alicea'`,
+      `select discord_id from public.profiles`,
     );
-    assert.match(err, /discord_id_numeric|violates check/i);
+    assert.match(err, /discord_id/i);
+    assert.equal((await bobsCard()).discord_id, undefined);
   });
 });
 

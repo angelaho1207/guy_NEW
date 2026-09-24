@@ -223,7 +223,7 @@ D11 extended the same mechanism to the UWB path, which is why the table is
 
 ---
 
-## D9 — Two required fields, and Discord's id rides with its username
+## D9 — Two required fields, and Discord is a username only
 
 **First and last name are the only required profile content.** They are
 collected at signup, because a profile cannot exist without them, and they are
@@ -235,17 +235,24 @@ notifications fall back to the username. `fullName()` in the shared package
 returns null unless both halves are present, so nothing ever renders as
 "Alice -".
 
-**Discord stores a username and a numeric id, under one toggle.** The username
-is what people recognise and what shows on screen; the id is the only thing
-that can be turned into a link. Giving the id its own toggle would let someone
-share a username while withholding the thing that makes it useful, which is a
-setting with no meaning, so `discord_id` is not in the `profile_field` enum at
-all. The projection emits it alongside `discord`, and withholding Discord
-withholds both.
+**Discord stores a username and nothing else.** ~~It also stored a numeric user
+id, under the same toggle, because `discord.com/users/<id>` is the only address
+Discord has and a username cannot be resolved to one.~~ Reversed 24 Sep 2026;
+migration `0010` drops the column.
 
-The id is checked against a 15 to 25 digit pattern in the database, so a
-username typed into the id box is rejected rather than turned into a link that
-goes nowhere.
+The id bought one thing: a tappable handle on one field out of twenty. It cost
+every user a trip into Settings → Advanced → Developer Mode to copy an 18-digit
+number, and it read as a leftover of the `#1234` discriminator that Discord
+retired in 2023 — a different number, but nobody distinguishes them. Since
+unique usernames replaced that discriminator, a username is enough to find
+someone: it is searched inside Discord rather than opened from a link.
+
+So Discord joins the small set of handles that render as plain text. `linkFor`
+returns null for it, which was already the contract for a handle with no
+derivable address, and the second input is gone from the profile form.
+
+The column was dropped rather than left unread. A column collected but never
+projected is personal data held for no purpose.
 
 ---
 
@@ -371,3 +378,35 @@ trust failure, it is the part every screen depends on, and it is the only part
 that could be finished and verified without an Apple toolchain or answers to
 the open questions. The tap flow specifically is blocked on the spike, by
 instruction.
+
+---
+
+## D13 — Handles are stored bare; the app builds the link
+
+Added 24 Sep 2026, alongside WhatsApp and Messenger.
+
+Every handle field stores an identifier, never a URL, and the address is built
+from a fixed template in `packages/shared/src/handles.ts`. A pasted URL is
+accepted and reduced to the identifier inside it, because people paste them,
+but what lands in the column is the handle.
+
+The reason is that a stored URL is rendered as a link to whatever string is in
+that column, and that column is filled by typing. A typo, a tracking link, or
+something aimed deliberately elsewhere all become a tappable link that a
+contact has no reason to distrust. With a template, the worst case is a link to
+the wrong profile on the right site.
+
+Three fields cannot produce a safe link from what a person would naturally type,
+and each fails visibly rather than guessing:
+
+- **LinkedIn** appends random characters when the obvious slug is taken, so
+  `angela-ho` and `angela-ho-4289992b2` are different people. The form asks for
+  the URL and says why; the slug is still what gets stored.
+- **WhatsApp** links through `wa.me`, which reads bare digits as an
+  international number. Without a country code there is no way to tell which
+  country, so fewer than 8 digits renders as plain text.
+- **Discord** has no address derivable from a username at all. See D9.
+
+WhatsApp is its own field rather than a flag on `phone`, because the two are
+not always the same number and one can be shared while the other is withheld.
+Worth stating plainly: sharing WhatsApp shares a phone number.

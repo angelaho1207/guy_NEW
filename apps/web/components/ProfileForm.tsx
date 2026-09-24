@@ -12,7 +12,7 @@ import {
   type ProfileField,
 } from '@guy/shared';
 
-type Profile = Partial<Record<ProfileField | 'discord_id', string | null>>;
+type Profile = Partial<Record<ProfileField, string | null>>;
 
 const HANDLE_HINTS: Partial<Record<ProfileField, string>> = {
   linkedin: 'https://www.linkedin.com/in/angela-ho-4289992b2',
@@ -78,29 +78,6 @@ export function ProfileForm({
                     random characters to the end of most profile addresses, and
                     a guessed one leads to someone else.
                   </p>
-                )}
-
-                {f.key === 'discord' && (
-                  <div style={{ marginTop: 8 }}>
-                    <span className="field-label">
-                      Discord user ID (optional)
-                    </span>
-                    <input
-                      type="text"
-                      name="discord_id"
-                      defaultValue={profile.discord_id ?? ''}
-                      placeholder="284719302847193028"
-                    />
-                    <p className="tiny" style={{ margin: '6px 0 0' }}>
-                      Not the old #1234 tag — that is gone. This is the long
-                      number under Settings → Advanced → Developer Mode, then
-                      right-click your name → Copy User ID. Discord has no
-                      profile address built from a username, so without this
-                      your handle shows as plain text rather than a link.
-                      Optional, and it shares and hides along with your
-                      username, never separately.
-                    </p>
-                  </div>
                 )}
               </div>
             ))}

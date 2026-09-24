@@ -60,36 +60,14 @@ describe('building the tappable link', () => {
     assert.equal(linkFor('work_email', 'a@b.co'), 'mailto:a@b.co');
   });
 
-  test('Discord links through the numeric id', () => {
-    assert.equal(
-      linkFor('discord', 'angela', '123456789012345678'),
-      'https://discord.com/users/123456789012345678',
-    );
-  });
-
-  test('Discord without an id is plain text, not a broken link', () => {
-    // A username alone cannot be resolved to a profile URL. Returning null
-    // forces the UI to render text rather than a link that goes nowhere.
+  test('Discord is plain text, never a link', () => {
+    // Discord's only profile address is built from an 18-digit user id, and
+    // asking twenty people for that to make one field tappable was a worse
+    // trade than showing the username. Unique usernames are findable by
+    // search, so null here is the honest answer rather than a fallback.
     assert.equal(linkFor('discord', 'angela'), null);
-    assert.equal(linkFor('discord', 'angela', null), null);
-    assert.equal(linkFor('discord', 'angela', ''), null);
-  });
-
-  test('a malformed Discord id is refused rather than linked', () => {
-    assert.equal(linkFor('discord', 'angela', 'not-an-id'), null);
-    assert.equal(linkFor('discord', 'angela', '123'), null);
-    assert.equal(
-      linkFor('discord', 'angela', '12345678901234567890123456789'),
-      null,
-      'too long to be a snowflake',
-    );
-  });
-
-  test('a Discord id with stray whitespace still links', () => {
-    assert.equal(
-      linkFor('discord', 'angela', '  123456789012345678  '),
-      'https://discord.com/users/123456789012345678',
-    );
+    assert.equal(linkFor('discord', '@angela'), null);
+    assert.equal(displayHandle('discord', 'angela'), '@angela');
   });
 
   test('an empty handle has no link', () => {

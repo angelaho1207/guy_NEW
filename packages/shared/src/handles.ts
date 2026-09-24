@@ -9,12 +9,12 @@
  * people paste them, but the handle is what is stored and the link is always
  * built from it.
  *
- * Discord needs a second value. A username cannot be resolved to a profile
- * link, but the numeric user id can, so the profile collects both: the
- * username is what people recognise, the id is what makes it tappable. The id
- * is not separately shareable; it travels with the username. Pass it to
- * `linkFor` as the third argument. Without it, Discord renders as plain text
- * rather than as a link that goes nowhere.
+ * Discord is the field with no address at all. Its only profile URL is built
+ * from an 18-digit user id that nobody knows by heart, and since unique
+ * usernames replaced the #1234 discriminator a username is enough to find
+ * someone -- searched inside Discord, not opened from a link. So `linkFor`
+ * returns null for it and the handle renders as plain text. See migration
+ * 0010, which removed the id this used to collect.
  */
 
 import type { ProfileField } from './fields.ts';
@@ -105,23 +105,14 @@ export function normalizeHandle(field: HandleField, raw: string): string {
   return value.trim();
 }
 
-/** A Discord user id is a snowflake: a long run of digits. */
-export function isValidDiscordId(id: string | null | undefined): boolean {
-  return typeof id === 'string' && /^[0-9]{15,25}$/.test(id.trim());
-}
-
 /**
  * The URL a tap should open, or null when this handle is not tappable.
  *
  * Returning null is meaningful: the caller must render plain text rather than
- * inventing a link that goes somewhere wrong. Discord returns null unless a
- * valid numeric id is supplied, since the username alone cannot be resolved.
+ * inventing a link that goes somewhere wrong. Discord always returns null: a
+ * username cannot be resolved to an address, and there is nothing to guess.
  */
-export function linkFor(
-  field: HandleField,
-  handle: string,
-  discordId?: string | null,
-): string | null {
+export function linkFor(field: HandleField, handle: string): string | null {
   const value = normalizeHandle(field, handle);
   if (value === '') return null;
 
@@ -148,10 +139,7 @@ export function linkFor(
     case 'personal_email':
       return `mailto:${value}`;
     case 'discord':
-      // The username is what shows; the id is what the tap follows.
-      return isValidDiscordId(discordId)
-        ? `https://discord.com/users/${discordId!.trim()}`
-        : null;
+      return null;
   }
 }
 
