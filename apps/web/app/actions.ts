@@ -347,6 +347,36 @@ export async function redeemToken(_prev: unknown, formData: FormData) {
   }
 }
 
+/**
+ * The cheap half of watching for a confirmation prompt.
+ *
+ * Re-rendering the whole connect page every two seconds to find out whether
+ * anything arrived cost five database calls a go, per phone, forever. This is
+ * one query, and the page is only re-rendered when the answer changes.
+ *
+ * Returns null rather than an empty string when something went wrong, so a
+ * blip reads as "no news" instead of as "the exchange disappeared".
+ */
+export async function pendingExchangeSignature(): Promise<string | null> {
+  const me = await currentUser();
+  if (!me) return null;
+
+  try {
+    const rows = await asUser<{ sig: string | null }>(
+      me.user_id,
+      `select string_agg(e.id::text, ',' order by e.id) as sig
+         from public.exchanges e
+        where e.state = 'pending'
+          and e.expires_at > now()
+          and (e.initiator_id = $1 or e.responder_id = $1)`,
+      [me.user_id],
+    );
+    return rows[0]?.sig ?? '';
+  } catch {
+    return null;
+  }
+}
+
 // --- Nearby presence -------------------------------------------------------
 
 /**

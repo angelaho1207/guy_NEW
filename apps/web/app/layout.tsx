@@ -27,18 +27,19 @@ export default async function RootLayout({
   let pending = 0;
 
   if (me) {
-    const [f] = await asUser<{ n: number }>(
+    // Both badge counts in one query. Two reads that always happen together
+    // are two pooled connections and two round trips for no reason, and this
+    // layout re-renders on every poll.
+    const [counts] = await asUser<{ follow_ups: number; pending: number }>(
       me.user_id,
-      `select count(*)::int as n from public.undone_follow_ups`,
-    );
-    const [p] = await asUser<{ n: number }>(
-      me.user_id,
-      `select count(*)::int as n from public.visible_one_on_ones
-        where recipient_id = $1 and status = 'pending'`,
+      `select
+         (select count(*)::int from public.undone_follow_ups) as follow_ups,
+         (select count(*)::int from public.visible_one_on_ones
+           where recipient_id = $1 and status = 'pending') as pending`,
       [me.user_id],
     );
-    followUps = Number(f?.n ?? 0);
-    pending = Number(p?.n ?? 0);
+    followUps = Number(counts?.follow_ups ?? 0);
+    pending = Number(counts?.pending ?? 0);
   }
 
   return (

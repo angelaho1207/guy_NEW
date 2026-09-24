@@ -1,4 +1,5 @@
 import 'server-only';
+import { cache } from 'react';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { asAdmin, asUser, usingSupabase } from './db';
@@ -33,8 +34,15 @@ export async function demoUsers(): Promise<Person[]> {
   );
 }
 
-/** Whoever is signed in, or null. Safe to call from anywhere. */
-export async function currentUser(): Promise<Person | null> {
+/**
+ * Whoever is signed in, or null. Safe to call from anywhere.
+ *
+ * Wrapped in React's `cache`, so the layout and the page it wraps share one
+ * answer instead of each paying for an auth check and a profile read. On the
+ * connect screen that alone was two of the five database calls per render,
+ * repeated every two seconds by the poller.
+ */
+export const currentUser = cache(async function currentUser(): Promise<Person | null> {
   if (usingSupabase) {
     const supabase = await supabaseServer();
     const {
@@ -54,7 +62,7 @@ export async function currentUser(): Promise<Person | null> {
   const users = await demoUsers();
   // Angela is the first seeded profile, and the default point of view.
   return users.find((u) => u.user_id === wanted) ?? users[0] ?? null;
-}
+});
 
 /**
  * Whoever is signed in, or off to the sign-in screen.

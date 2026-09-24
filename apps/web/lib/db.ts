@@ -49,10 +49,15 @@ function pool(): Pool {
     g.__guyPool = new Pool({
       connectionString: CONNECTION_STRING,
       ssl: { rejectUnauthorized: false },
-      // Serverless functions are short lived and numerous, so hold few
-      // connections and release them quickly rather than exhausting the
-      // pooler.
-      max: 4,
+      // One connection per instance, not four.
+      //
+      // A serverless function handles a single request at a time, so a bigger
+      // pool buys an instance nothing -- while every instance holding four
+      // connections multiplies against however many instances the platform
+      // decided to run. The free tier allows 60 in total, and fifteen warm
+      // instances is not a lot of traffic. Exhausting it surfaces as an
+      // intermittent 500, which is the worst way to learn about it.
+      max: 1,
       idleTimeoutMillis: 10_000,
       connectionTimeoutMillis: 10_000,
     });
@@ -60,18 +65,41 @@ function pool(): Pool {
   return g.__guyPool;
 }
 
+/**
+ * Supabase user ids are UUIDs. Checked because the preamble below interpolates
+ * the id rather than binding it, and an id that is not a UUID has no business
+ * reaching the database anyway.
+ */
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Single-quoted SQL literal, for the one place a parameter cannot be used. */
+function literal(value: string): string {
+  return `'${value.replace(/'/g, "''")}'`;
+}
+
 async function queryPostgres<T>(
   uid: string | null,
   sql: string,
   params: unknown[],
 ): Promise<T[]> {
+  if (uid !== null && !UUID.test(uid)) {
+    throw new Error('not a valid user id');
+  }
+
+  const role = uid ? 'authenticated' : 'anon';
+  const claims = JSON.stringify({ sub: uid, role });
+
   const client = await pool().connect();
   try {
-    await client.query('begin');
-    await client.query(`set local role ${uid ? 'authenticated' : 'anon'}`);
-    await client.query(`select set_config('request.jwt.claims', $1, true)`, [
-      JSON.stringify({ sub: uid, role: uid ? 'authenticated' : 'anon' }),
-    ]);
+    // The whole preamble in one round trip rather than three. It used to be
+    // three separate awaits, which meant five network hops for every query on
+    // a page that issues several, with a pooled connection held open across
+    // all of them. `set local` still scopes both to the transaction, so a
+    // connection handed to the next request carries nothing over.
+    await client.query(
+      `begin; set local role ${role}; ` +
+        `select set_config('request.jwt.claims', ${literal(claims)}, true);`,
+    );
 
     const res = await client.query(sql, params);
     await client.query('commit');
