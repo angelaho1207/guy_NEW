@@ -114,3 +114,51 @@ describe('displaying the handle', () => {
     assert.equal(displayHandle('phone', '+1 555 010 0123'), '+15550100123');
   });
 });
+
+describe('WhatsApp and Messenger', () => {
+  test('a WhatsApp number becomes a wa.me chat link', () => {
+    assert.equal(linkFor('whatsapp', '+1 650 555 0142'), 'https://wa.me/16505550142');
+  });
+
+  test('a pasted wa.me link reduces to the number it contained', () => {
+    assert.equal(normalizeHandle('whatsapp', 'https://wa.me/16505550142'), '+16505550142');
+    assert.equal(
+      normalizeHandle('whatsapp', 'https://api.whatsapp.com/send?phone=16505550142'),
+      '+16505550142',
+    );
+  });
+
+  test('a number too short to carry a country code is not linked', () => {
+    // wa.me resolves digits as an international number. Guessing a country
+    // code would send someone to a stranger, so this renders as plain text.
+    assert.equal(linkFor('whatsapp', '555 0142'), null);
+    assert.equal(displayHandle('whatsapp', '555 0142'), '5550142');
+  });
+
+  test('a Messenger username becomes an m.me link', () => {
+    assert.equal(linkFor('messenger', 'angela.ho'), 'https://m.me/angela.ho');
+    assert.equal(displayHandle('messenger', 'angela.ho'), '@angela.ho');
+  });
+
+  test('a pasted Messenger or Facebook URL reduces to the username', () => {
+    for (const pasted of [
+      'https://m.me/angela.ho',
+      'm.me/angela.ho',
+      'https://www.messenger.com/t/angela.ho',
+      'https://www.facebook.com/angela.ho',
+      'https://www.facebook.com/messages/t/angela.ho',
+      '@angela.ho',
+    ]) {
+      assert.equal(normalizeHandle('messenger', pasted), 'angela.ho', pasted);
+    }
+  });
+
+  test('a Messenger handle with URL-unsafe characters is escaped', () => {
+    assert.equal(linkFor('messenger', 'a b&c'), 'https://m.me/a%20b%26c');
+  });
+
+  test('an empty value has no link', () => {
+    assert.equal(linkFor('whatsapp', '  '), null);
+    assert.equal(linkFor('messenger', ''), null);
+  });
+});

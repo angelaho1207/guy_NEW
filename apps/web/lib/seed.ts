@@ -87,6 +87,8 @@ export async function seed(pg: PGlite) {
        linkedin = 'angela-ho',
        x = 'angelaho',
        instagram = 'angela.ho',
+       whatsapp = '+16505550142',
+       messenger = 'angela.ho',
        discord = 'angelaho',
        discord_id = '284719302847193028',
        phone = '+16505550142',
@@ -110,6 +112,8 @@ export async function seed(pg: PGlite) {
        linkedin = 'marcus-webb',
        x = 'marcuswebb',
        instagram = 'marcus.webb',
+       whatsapp = '+447700900142',
+       messenger = 'marcus.webb',
        discord = 'mwebb',
        discord_id = '193847562019384756',
        phone = '+447700900142',
@@ -140,7 +144,8 @@ export async function seed(pg: PGlite) {
   await as(
     priya,
     `update public.profile_field_shares set shareable = false
-      where field in ('phone', 'personal_email', 'instagram', 'hometown')`,
+      where field in
+        ('phone', 'whatsapp', 'personal_email', 'instagram', 'hometown')`,
   );
 
   // Tobias filled almost nothing in, but shares all of it. The "-" case.

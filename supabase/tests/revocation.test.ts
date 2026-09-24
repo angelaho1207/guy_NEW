@@ -10,6 +10,10 @@
 import { test, before, after, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { boot, row, type Db } from './harness.ts';
+import { FIELD_KEYS } from '../../packages/shared/src/fields.ts';
+
+// See the note in consent.test.ts: counted, not written down.
+const FIELD_COUNT = FIELD_KEYS.length;
 
 let db: Db;
 let alice: string;
@@ -297,7 +301,7 @@ describe('tapping someone you already know', () => {
     assert.equal(Number(r.n), 1, 'still exactly one row, not a duplicate');
     assert.equal(
       Number(r.field_count),
-      17,
+      FIELD_COUNT - 1,
       'a repeat tap must not rewrite the record of what was shared that day',
     );
   });

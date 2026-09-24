@@ -1,6 +1,6 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
@@ -16,18 +16,49 @@ import {
 } from '../src/fields.ts';
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
-const initSql = readFileSync(
-  join(repoRoot, 'supabase', 'migrations', '0001_init.sql'),
-  'utf8',
-);
+const migrationsDir = join(repoRoot, 'supabase', 'migrations');
 
-/** Pulls the labels out of `create type public.profile_field as enum (...)`. */
+/**
+ * The profile_field enum as the database would end up holding it.
+ *
+ * Reading only the `create type` in 0001 would have stopped being the truth
+ * the first time a field was added in a later migration, and the guard below
+ * would have gone on passing while describing a schema that no longer exists.
+ * So this replays every migration in order: the create, then each
+ * `alter type ... add value`, honouring `before` and `after`, because enum
+ * sort order is what enum_range() and every ordered read follow.
+ */
 function enumMembers(): string[] {
-  const match = initSql.match(
-    /create type public\.profile_field as enum \(([\s\S]*?)\);/,
-  );
-  assert.ok(match, 'could not find the profile_field enum in the migration');
-  return [...match[1].matchAll(/'([a-z_]+)'/g)].map((m) => m[1]);
+  const files = readdirSync(migrationsDir).filter((f) => f.endsWith('.sql')).sort();
+  let members: string[] | null = null;
+
+  for (const file of files) {
+    const sql = readFileSync(join(migrationsDir, file), 'utf8');
+
+    const created = sql.match(/create type public\.profile_field as enum \(([\s\S]*?)\);/);
+    if (created) {
+      assert.equal(members, null, `profile_field is created twice, in ${file}`);
+      members = [...created[1].matchAll(/'([a-z_]+)'/g)].map((m) => m[1]);
+    }
+
+    const added = sql.matchAll(
+      /alter type public\.profile_field add value (?:if not exists )?'([a-z_]+)'(?:\s+(before|after)\s+'([a-z_]+)')?/gi,
+    );
+    for (const [, label, position, anchor] of added) {
+      assert.ok(members, `${file} adds to profile_field before it is created`);
+      if (members!.includes(label)) continue; // `if not exists`, replayed
+      if (!position) {
+        members!.push(label);
+        continue;
+      }
+      const at = members!.indexOf(anchor!);
+      assert.notEqual(at, -1, `${file} places '${label}' ${position} '${anchor}', which does not exist`);
+      members!.splice(position.toLowerCase() === 'after' ? at + 1 : at, 0, label);
+    }
+  }
+
+  assert.ok(members, 'could not find the profile_field enum in any migration');
+  return members!;
 }
 
 describe('the field registry', () => {

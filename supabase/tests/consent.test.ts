@@ -6,6 +6,13 @@
 import { test, before, after, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { boot, row, rows, type Db } from './harness.ts';
+import { FIELD_KEYS } from '../../packages/shared/src/fields.ts';
+
+// Counted from the registry rather than written as a number, so that adding a
+// field stays a one-line change instead of a hunt through failing assertions.
+// A separate test keeps the registry and the enum in step, so this really is
+// the number of fields the database has.
+const FIELD_COUNT = FIELD_KEYS.length;
 
 let db: Db;
 let alice: string;
@@ -35,6 +42,22 @@ async function completeExchange(a: string, b: string) {
   return id;
 }
 
+describe('the field registry and the database agree', () => {
+  // packages/shared/test/fields.test.ts checks the registry against the
+  // migration text, which means it checks it against a regex that reads
+  // `create type` and `alter type ... add value`. This checks it against a
+  // Postgres that has actually run those statements, so a placement the parser
+  // reads one way and the database applies another cannot slip through.
+  test('enum_range matches FIELD_KEYS exactly, in order', async () => {
+    const res = row<{ labels: string }>(
+      await db.admin(
+        `select array_to_string(enum_range(null::public.profile_field), ',') as labels`,
+      ),
+    );
+    assert.deepEqual(res.labels.split(','), [...FIELD_KEYS]);
+  });
+});
+
 describe('profile isolation', () => {
   test('a new profile has every field marked shareable', async () => {
     const res = row<{ total: number; on: number }>(
@@ -45,16 +68,16 @@ describe('profile isolation', () => {
            from public.profile_field_shares`,
       ),
     );
-    assert.equal(res.total, 18);
-    assert.equal(res.on, 18, 'the shareable toggle must default to on');
+    assert.equal(res.total, FIELD_COUNT);
+    assert.equal(res.on, FIELD_COUNT, 'the shareable toggle must default to on');
   });
 
   test('field share rows are scoped to their owner', async () => {
-    // Alice sees 18 rows, not 36, even though Bob's rows exist.
+    // Alice sees her own rows only, even though Bob's exist.
     const res = row<{ n: number }>(
       await db.as(alice, `select count(*)::int as n from public.profile_field_shares`),
     );
-    assert.equal(res.n, 18);
+    assert.equal(res.n, FIELD_COUNT);
   });
 
   test('one user cannot read another user\'s profile row', async () => {
@@ -92,8 +115,8 @@ describe('the projection', () => {
   test('returns every field currently marked shareable', async () => {
     const card = await project(alice);
 
-    // All 18 fields are on by default, so all 18 come back.
-    assert.equal(Object.keys(card).length, 18);
+    // Every field is on by default, so every field comes back.
+    assert.equal(Object.keys(card).length, FIELD_COUNT);
     assert.equal(card.first_name, 'Alice');
     assert.equal(card.last_name, 'Alvarez');
   });
@@ -115,7 +138,7 @@ describe('the projection', () => {
 
     const card = await project(alice);
     assert.equal(card.hometown, undefined);
-    assert.equal(Object.keys(card).length, 17);
+    assert.equal(Object.keys(card).length, FIELD_COUNT - 1);
 
     await db.as(
       alice,
@@ -204,13 +227,13 @@ describe('exchange handshake', () => {
       false,
       'Alice withheld her phone, so it is not in the record of that exchange',
     );
-    assert.equal(Number(bobsRow.field_count), 17);
+    assert.equal(Number(bobsRow.field_count), FIELD_COUNT - 1);
     assert.equal(
       alicesRow.shares_phone,
       true,
       'Bob shared everything, so Alice\'s row carries his phone field',
     );
-    assert.equal(Number(alicesRow.field_count), 18);
+    assert.equal(Number(alicesRow.field_count), FIELD_COUNT);
   });
 
   test('the withheld field is absent from the card, not blanked', async () => {

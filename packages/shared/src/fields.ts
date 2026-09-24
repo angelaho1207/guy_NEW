@@ -32,6 +32,8 @@ export const PROFILE_FIELDS = [
   { key: 'x', group: 'handles', label: 'X' },
   { key: 'discord', group: 'handles', label: 'Discord' },
   { key: 'instagram', group: 'handles', label: 'Instagram' },
+  { key: 'whatsapp', group: 'handles', label: 'WhatsApp' },
+  { key: 'messenger', group: 'handles', label: 'Messenger' },
   { key: 'phone', group: 'handles', label: 'Phone' },
   { key: 'work_email', group: 'handles', label: 'Work email' },
   { key: 'personal_email', group: 'handles', label: 'Personal email' },

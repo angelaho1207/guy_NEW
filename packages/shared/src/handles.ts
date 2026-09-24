@@ -2,8 +2,12 @@
  * Turning a stored handle into something tappable.
  *
  * Handles are stored bare and the profile URL is constructed from them, so
- * tapping LinkedIn, X or Instagram opens the profile, tapping a phone number
- * opens the dialer, and tapping an email opens the mail client.
+ * tapping LinkedIn, X, Instagram or Messenger opens the profile, tapping a
+ * phone number opens the dialer, tapping WhatsApp opens a chat, and tapping an
+ * email opens the mail client. Nothing here asks anyone to paste a URL: a
+ * pasted URL is accepted and reduced back to the handle inside it, because
+ * people paste them, but the handle is what is stored and the link is always
+ * built from it.
  *
  * Discord needs a second value. A username cannot be resolved to a profile
  * link, but the numeric user id can, so the profile collects both: the
@@ -20,6 +24,8 @@ export type HandleField =
   | 'x'
   | 'discord'
   | 'instagram'
+  | 'whatsapp'
+  | 'messenger'
   | 'phone'
   | 'work_email'
   | 'personal_email';
@@ -29,6 +35,8 @@ export const HANDLE_FIELDS: readonly HandleField[] = [
   'x',
   'discord',
   'instagram',
+  'whatsapp',
+  'messenger',
   'phone',
   'work_email',
   'personal_email',
@@ -49,6 +57,12 @@ const PASTE_PREFIXES: Record<string, RegExp[]> = {
     /^https?:\/\/(www\.)?instagram\.com\//i,
     /^(www\.)?instagram\.com\//i,
   ],
+  messenger: [
+    /^https?:\/\/(www\.)?(m\.me|messenger\.com)\/(t\/)?/i,
+    /^(www\.)?(m\.me|messenger\.com)\/(t\/)?/i,
+    /^https?:\/\/(www\.)?facebook\.com\/(messages\/t\/)?/i,
+    /^(www\.)?facebook\.com\/(messages\/t\/)?/i,
+  ],
 };
 
 /**
@@ -61,9 +75,11 @@ export function normalizeHandle(field: HandleField, raw: string): string {
   let value = raw.trim();
   if (value === '') return '';
 
-  if (field === 'phone') {
-    // Keep a leading +, drop the formatting humans add.
-    const plus = value.startsWith('+') ? '+' : '';
+  if (field === 'phone' || field === 'whatsapp') {
+    // Keep a leading +, drop the formatting humans add. A pasted wa.me or
+    // api.whatsapp.com link falls out of this too: everything that is not a
+    // digit goes, and what is left is the number the link was built from.
+    const plus = value.startsWith('+') || /wa\.me|whatsapp/i.test(value) ? '+' : '';
     return plus + value.replace(/[^\d]/g, '');
   }
 
@@ -106,6 +122,16 @@ export function linkFor(
       return `https://x.com/${encodeURIComponent(value)}`;
     case 'instagram':
       return `https://instagram.com/${encodeURIComponent(value)}`;
+    case 'messenger':
+      return `https://m.me/${encodeURIComponent(value)}`;
+    case 'whatsapp': {
+      // wa.me wants digits with a country code and no punctuation. A number
+      // typed without a country code cannot be turned into a working link, and
+      // there is no way to guess which country it belongs to, so short inputs
+      // render as plain text rather than as a link to the wrong person.
+      const digits = value.replace(/[^\d]/g, '');
+      return digits.length >= 8 ? `https://wa.me/${digits}` : null;
+    }
     case 'phone':
       return `tel:${value}`;
     case 'work_email':
@@ -129,6 +155,7 @@ export function displayHandle(field: HandleField, handle: string): string {
     case 'x':
     case 'instagram':
     case 'discord':
+    case 'messenger':
       return `@${value}`;
     default:
       return value;

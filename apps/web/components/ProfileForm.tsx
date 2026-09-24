@@ -18,6 +18,8 @@ const HANDLE_HINTS: Partial<Record<ProfileField, string>> = {
   linkedin: 'angela-ho, or paste the whole profile URL',
   x: 'angelaho',
   instagram: 'angela.ho',
+  whatsapp: '+1 650 555 0142 — include the country code',
+  messenger: 'angela.ho, or paste your m.me link',
   discord: 'angelaho',
   phone: '+1 650 555 0142',
   work_email: 'you@work.com',
