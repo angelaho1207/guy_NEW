@@ -162,3 +162,35 @@ describe('WhatsApp and Messenger', () => {
     assert.equal(linkFor('messenger', ''), null);
   });
 });
+
+describe('LinkedIn, where the slug is not guessable', () => {
+  // LinkedIn appends random characters when the obvious slug is taken, so
+  // angela-ho and angela-ho-4289992b2 are different people. The form asks for
+  // the URL; these are the shapes it arrives in.
+  const slug = 'angela-ho-4289992b2';
+
+  test('a pasted profile URL keeps the whole slug, suffix and all', () => {
+    for (const pasted of [
+      `https://www.linkedin.com/in/${slug}`,
+      `https://linkedin.com/in/${slug}`,
+      `www.linkedin.com/in/${slug}`,
+      `linkedin.com/in/${slug}/`,
+      `https://uk.linkedin.com/in/${slug}`,
+      `https://m.linkedin.com/in/${slug}?trk=nav`,
+    ]) {
+      assert.equal(normalizeHandle('linkedin', pasted), slug, pasted);
+    }
+  });
+
+  test('the link rebuilds the address that was pasted in', () => {
+    assert.equal(
+      linkFor('linkedin', `https://uk.linkedin.com/in/${slug}`),
+      `https://www.linkedin.com/in/${slug}`,
+    );
+  });
+
+  test('it reads as a path, not as an @ handle', () => {
+    assert.equal(displayHandle('linkedin', `https://www.linkedin.com/in/${slug}`),
+      `linkedin.com/in/${slug}`);
+  });
+});

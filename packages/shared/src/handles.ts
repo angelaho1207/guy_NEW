@@ -48,7 +48,17 @@ export function isHandleField(key: ProfileField): key is HandleField {
 
 /** Hosts we strip when someone pastes a full URL instead of a bare handle. */
 const PASTE_PREFIXES: Record<string, RegExp[]> = {
-  linkedin: [/^https?:\/\/(www\.)?linkedin\.com\/in\//i, /^(www\.)?linkedin\.com\/in\//i],
+  // LinkedIn is the one field the form asks for a URL rather than a handle,
+  // because the slug is not derivable from a name: LinkedIn appends a random
+  // suffix when the obvious one is taken, so `angela-ho` and
+  // `angela-ho-4289992b2` are both real profiles belonging to different
+  // people. The URL is still reduced to its slug on the way in, so what gets
+  // stored is a handle like every other field and the link is still built from
+  // a fixed template rather than from whatever string was pasted.
+  //
+  // The optional short subdomain covers the country-specific hosts LinkedIn
+  // redirects to (uk., de., m.) as well as www.
+  linkedin: [/^(https?:\/\/)?([a-z]{1,3}\.)?linkedin\.com\/in\//i],
   x: [
     /^https?:\/\/(www\.)?(x|twitter)\.com\//i,
     /^(www\.)?(x|twitter)\.com\//i,
@@ -151,12 +161,15 @@ export function displayHandle(field: HandleField, handle: string): string {
   if (value === '') return '';
 
   switch (field) {
-    case 'linkedin':
     case 'x':
     case 'instagram':
     case 'discord':
     case 'messenger':
       return `@${value}`;
+    case 'linkedin':
+      // Not an @ handle, and often ends in a random suffix. Showing the path
+      // it actually resolves to reads more honestly than dressing it up.
+      return `linkedin.com/in/${value}`;
     default:
       return value;
   }

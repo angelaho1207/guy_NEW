@@ -15,7 +15,7 @@ import {
 type Profile = Partial<Record<ProfileField | 'discord_id', string | null>>;
 
 const HANDLE_HINTS: Partial<Record<ProfileField, string>> = {
-  linkedin: 'angela-ho, or paste the whole profile URL',
+  linkedin: 'https://www.linkedin.com/in/angela-ho-4289992b2',
   x: 'angelaho',
   instagram: 'angela.ho',
   whatsapp: '+1 650 555 0142 — include the country code',
@@ -70,6 +70,14 @@ export function ProfileForm({
                     defaultValue={profile[f.key] ?? ''}
                     placeholder={HANDLE_HINTS[f.key] ?? ''}
                   />
+                )}
+
+                {f.key === 'linkedin' && (
+                  <p className="tiny" style={{ margin: '6px 0 0' }}>
+                    Paste the whole URL for this one. LinkedIn adds a few
+                    random characters to the end of most profile addresses, and
+                    a guessed one leads to someone else.
+                  </p>
                 )}
 
                 {f.key === 'discord' && (
