@@ -92,9 +92,13 @@ export function ProfileForm({
                       placeholder="284719302847193028"
                     />
                     <p className="tiny" style={{ margin: '6px 0 0' }}>
-                      A Discord username cannot be turned into a link, so
-                      without this your handle shows as plain text. It shares
-                      and hides along with your username, never separately.
+                      Not the old #1234 tag — that is gone. This is the long
+                      number under Settings → Advanced → Developer Mode, then
+                      right-click your name → Copy User ID. Discord has no
+                      profile address built from a username, so without this
+                      your handle shows as plain text rather than a link.
+                      Optional, and it shares and hides along with your
+                      username, never separately.
                     </p>
                   </div>
                 )}
