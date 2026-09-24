@@ -347,6 +347,110 @@ export async function redeemToken(_prev: unknown, formData: FormData) {
   }
 }
 
+// --- Nearby presence -------------------------------------------------------
+
+/**
+ * One row of the nearby list. Everything here is what `nearby_people()`
+ * decided to return, which is a name and a rough distance and nothing else.
+ * Nothing about someone's profile crosses until both people confirm.
+ */
+export type NearbyPerson = {
+  user_id: string;
+  display_name: string;
+  metres: number | null;
+  same_network: boolean;
+  already_connected: boolean;
+};
+
+/**
+ * Says "I still have the connect screen open", and asks who else does.
+ *
+ * Both halves in one round trip, because they always happen together: the
+ * list is only returned to someone who is themselves present, which is what
+ * stops presence being a directory you can browse invisibly.
+ *
+ * `network_hint` is deliberately not sent yet. Two phones at the same party
+ * are usually on cellular rather than a shared wifi, so it would rarely help,
+ * and carrier-grade NAT puts strangers across a whole city behind one address,
+ * so it would sometimes hurt. Location alone is the honest version.
+ */
+export async function heartbeatPresence(
+  pos: { lat: number; lng: number; accuracy: number | null } | null,
+): Promise<{ people: NearbyPerson[] } | { error: string }> {
+  const me = await requireUser();
+
+  try {
+    await asUser(
+      me.user_id,
+      `select public.start_presence(
+         $1::double precision, $2::double precision, $3::double precision, null)`,
+      [pos?.lat ?? null, pos?.lng ?? null, pos?.accuracy ?? null],
+    );
+
+    const people = await asUser<NearbyPerson>(
+      me.user_id,
+      `select * from public.nearby_people()`,
+    );
+
+    return { people };
+  } catch (err) {
+    return { error: message(err) };
+  }
+}
+
+/**
+ * Leaving the screen. Uses currentUser rather than requireUser because this
+ * runs while the page is going away, and a redirect at that moment is noise.
+ *
+ * Best effort by design: a phone that loses signal never gets here, which is
+ * why rows also expire on their own after 45 seconds and a cron job sweeps
+ * them. This just makes the common case instant.
+ */
+export async function leavePresence() {
+  const me = await currentUser();
+  if (!me) return;
+  try {
+    await asUser(me.user_id, `select public.end_presence()`);
+  } catch {
+    // Nothing useful to say to a page that is already unmounting.
+  }
+}
+
+/**
+ * Tapping someone on the list.
+ *
+ * This is the one connect path that names an account, and D11 says that is a
+ * bug everywhere else. It is safe here only because the server re-derives the
+ * list: `open_nearby_exchange` refuses anyone who is not currently nearby and
+ * present, so naming an id gets a caller no further than their own screen
+ * already showed them.
+ */
+export type ConnectNearbyResult =
+  | { alreadyConnected: true }
+  | { exchangeId: string }
+  | { error: string };
+
+export async function connectNearby(targetId: string): Promise<ConnectNearbyResult> {
+  const me = await requireUser();
+
+  try {
+    const rows = await asUser<{ status: string; exchange_id: string | null }>(
+      me.user_id,
+      `select * from public.open_nearby_exchange($1)`,
+      [targetId],
+    );
+
+    revalidatePath('/connect');
+
+    if (rows[0].status === 'already_connected') {
+      return { alreadyConnected: true as const };
+    }
+    return { exchangeId: rows[0].exchange_id! };
+  } catch (err) {
+    return { error: message(err) };
+  }
+}
+
 export async function confirmExchange(_prev: unknown, formData: FormData) {
   const me = await requireUser();
   const id = String(formData.get('exchange_id'));

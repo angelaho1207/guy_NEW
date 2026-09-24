@@ -142,6 +142,19 @@ describe('when there is no location', () => {
     await arrive(bob, null, null);
     assert.deepEqual(await listFor(alice), []);
   });
+
+  test('someone who refused location is invisible, and sees nobody', async () => {
+    // The web app tells anyone who denies the permission that nearby cannot
+    // work for them and points them at the code instead. This is the
+    // behaviour that copy is describing, in both directions: distance is null
+    // when either side lacks coordinates, and a null comparison is not a
+    // match. If this ever softened, that screen would be lying.
+    await arrive(alice, HERE);
+    await arrive(bob, null, null);
+
+    assert.deepEqual(await listFor(alice), [], 'they do not appear to you');
+    assert.deepEqual(await listFor(bob), [], 'and you do not appear to them');
+  });
 });
 
 describe('names on the list', () => {

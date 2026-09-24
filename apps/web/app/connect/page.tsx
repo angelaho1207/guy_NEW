@@ -1,6 +1,7 @@
 import { asUser } from '@/lib/db';
 import { requireUser } from '@/lib/session';
 import { ScanBox } from '@/components/ScanBox';
+import { NearbyPanel } from '@/components/NearbyPanel';
 import { ConfirmPrompt } from '@/components/ConfirmPrompt';
 import { CodePanel } from '@/components/CodePanel';
 import { PendingWatcher } from '@/components/PendingWatcher';
@@ -43,9 +44,8 @@ export default async function ConnectPage() {
 
       <h1>Connect</h1>
       <p className="lede">
-        Show your code, or scan theirs. Either way both of you confirm before
-        anything is shared, and the code itself is useless a couple of minutes
-        from now.
+        If you both have this screen open, you will see each other below. Both
+        of you confirm before anything is shared, either way.
       </p>
 
       {pending.length > 0 && (
@@ -63,18 +63,18 @@ export default async function ConnectPage() {
         </>
       )}
 
-      <h2>Your code</h2>
+      <h2>Nearby</h2>
+      <NearbyPanel />
+
+      <h2>Or use a code</h2>
+      <p className="tiny" style={{ marginTop: -4 }}>
+        For when location is off, or the two of you are further apart than the
+        list reaches.
+      </p>
       <CodePanel />
 
-      <h2>Their code</h2>
-      <ScanBox />
 
-      <div className="banner">
-        <strong>On a phone this screen also does the tap.</strong> Two iPhones
-        held together range over ultra wideband, and the same code travels over
-        Bluetooth instead of through a camera. The server cannot tell the
-        difference, which is the point.
-      </div>
+      <ScanBox />
     </>
   );
 }
