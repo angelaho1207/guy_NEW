@@ -68,7 +68,8 @@ select {
 .shell {
   max-width: 780px;
   margin: 0 auto;
-  padding: 0 16px 96px;
+  /* Clears the fixed bottom bar, plus the iPhone home indicator under it. */
+  padding: 0 16px calc(104px + env(safe-area-inset-bottom, 0px));
 }
 
 .topbar {
@@ -100,11 +101,20 @@ select {
   color: var(--accent);
 }
 
+/* The three reading destinations, along the bottom in thumb reach. */
 .nav {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 10;
   display: flex;
+  justify-content: center;
   gap: 4px;
-  flex-wrap: wrap;
-  padding: 12px 0 4px;
+  padding: 10px 16px calc(10px + env(safe-area-inset-bottom, 0px));
+  background: rgba(11, 11, 13, 0.85);
+  backdrop-filter: blur(12px);
+  border-top: 1px solid var(--border);
 }
 
 .nav a {
@@ -551,11 +561,63 @@ textarea {
   line-height: 0;
 }
 
-.switcher {
+/* Profile, who you are, and the way out. Pushed to the right of the top bar. */
+.account {
   margin-left: auto;
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.switcher {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Pills in the top bar. Same shape as the bottom bar, smaller. */
+.toplink {
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 500;
+  text-decoration: none;
+  white-space: nowrap;
+  color: var(--text-secondary);
+  border: 1px solid transparent;
+}
+
+.toplink:hover {
+  color: var(--text-primary);
+  background: var(--surface);
+}
+
+.toplink[data-active='true'] {
+  color: var(--text-primary);
+  background: var(--accent-subtle);
+  border-color: var(--accent);
+}
+
+/* Five things share the top bar on a phone. Tighten rather than drop any:
+   knowing which account you are signed in as is the point of showing it. */
+@media (max-width: 560px) {
+  .topbar-inner {
+    gap: 8px;
+    padding: 10px 12px;
+  }
+
+  .account {
+    gap: 6px;
+  }
+
+  .toplink {
+    padding: 6px 10px;
+    font-size: 13px;
+  }
+
+  .wordmark {
+    font-size: 18px;
+  }
 }
 
 .switcher select {

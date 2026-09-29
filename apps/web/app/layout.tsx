@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import './globals.css';
-import { Nav } from '@/components/Nav';
+import { Nav, TopLink } from '@/components/Nav';
 import { UserSwitcher } from '@/components/UserSwitcher';
 import { currentUser, demoUsers } from '@/lib/session';
 import { asUser, usingSupabase } from '@/lib/db';
@@ -51,8 +51,11 @@ export default async function RootLayout({
               Guy<span>.</span>
             </Link>
 
+            {me && <TopLink href="/connect" label="Connect" />}
+
             {me && usingSupabase && (
-              <div className="switcher">
+              <div className="account">
+                <TopLink href="/profile" label="Profile" />
                 <span className="tiny">@{me.username}</span>
                 <form action={signOut}>
                   <button className="btn btn-quiet btn-sm">Sign out</button>
@@ -61,7 +64,10 @@ export default async function RootLayout({
             )}
 
             {me && !usingSupabase && (
-              <UserSwitcher users={users} current={me.user_id} />
+              <div className="account">
+                <TopLink href="/profile" label="Profile" />
+                <UserSwitcher users={users} current={me.user_id} />
+              </div>
             )}
           </div>
         </header>
