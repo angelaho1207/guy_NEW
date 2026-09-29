@@ -95,6 +95,7 @@ select {
   font-weight: 600;
   letter-spacing: -0.02em;
   text-decoration: none;
+  flex-shrink: 0;
 }
 
 .wordmark span {
@@ -567,6 +568,16 @@ textarea {
   display: flex;
   align-items: center;
   gap: 8px;
+  min-width: 0; /* lets the username truncate instead of overflowing */
+}
+
+/* A long username truncates rather than pushing Sign out off the screen.
+   Everything else in this row is fixed width, so this is the only give. */
+.account > .tiny {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 14ch;
 }
 
 .switcher {
@@ -617,6 +628,22 @@ textarea {
 
   .wordmark {
     font-size: 18px;
+  }
+
+  .account > .tiny {
+    max-width: 9ch;
+  }
+
+  .btn-sm {
+    padding: 6px 9px;
+  }
+}
+
+/* Narrower still: the wordmark is the one thing here that is decoration
+   rather than navigation, so it is what goes. */
+@media (max-width: 400px) {
+  .wordmark {
+    display: none;
   }
 }
 
