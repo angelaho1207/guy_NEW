@@ -3,6 +3,8 @@ import { requireUser } from '@/lib/session';
 import { ProfileForm } from '@/components/ProfileForm';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { DeleteAccount } from '@/components/DeleteAccount';
+import { PushToggle } from '@/components/PushToggle';
+import { hasPushSubscription } from '@/app/push-actions';
 import { usingSupabase } from '@/lib/db';
 
 export const dynamic = 'force-dynamic';
@@ -42,6 +44,8 @@ export default async function ProfilePage() {
 
       <h2>Settings</h2>
       <ThemeToggle />
+
+      {usingSupabase && <PushToggle subscribed={await hasPushSubscription()} />}
 
       {/* The demo database has no real accounts to delete, and its people are
           seeded fresh on every restart. */}

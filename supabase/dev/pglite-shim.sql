@@ -38,6 +38,33 @@ create role anon nologin;
 grant usage on schema auth to authenticated;
 grant usage on schema auth to anon;
 
+-- pg_net is not loadable in WASM either. Same approach as cron: record the
+-- request that would have gone out so a test can assert the worker was poked,
+-- and make none. The decision about WHETHER to poke is the interesting part and
+-- that is real code.
+create schema if not exists net;
+
+create table if not exists net.sent (
+  id         bigserial primary key,
+  url        text,
+  headers    jsonb,
+  body       jsonb,
+  created_at timestamptz not null default now()
+);
+
+create or replace function net.http_post(
+  url text,
+  body jsonb default '{}'::jsonb,
+  params jsonb default '{}'::jsonb,
+  headers jsonb default '{}'::jsonb,
+  timeout_milliseconds integer default 5000
+)
+returns bigint language sql as $shim$
+  insert into net.sent (url, headers, body)
+  values (url, headers, body)
+  returning id;
+$shim$;
+
 -- pg_cron cannot load in WASM. This records what would have been scheduled so
 -- a test can assert the jobs registered, and runs nothing. The job functions
 -- themselves are real and are called directly.

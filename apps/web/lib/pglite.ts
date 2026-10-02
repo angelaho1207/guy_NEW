@@ -22,6 +22,7 @@ import m0009 from '../../../supabase/migrations/0009_whatsapp_messenger.sql';
 import m0010 from '../../../supabase/migrations/0010_drop_discord_id.sql';
 import m0011 from '../../../supabase/migrations/0011_word_connect_codes.sql';
 import m0012 from '../../../supabase/migrations/0012_delete_my_account.sql';
+import m0013 from '../../../supabase/migrations/0013_web_push.sql';
 
 const MIGRATIONS: [string, string][] = [
   ['0001_init.sql', m0001],
@@ -36,6 +37,7 @@ const MIGRATIONS: [string, string][] = [
   ['0010_drop_discord_id.sql', m0010],
   ['0011_word_connect_codes.sql', m0011],
   ['0012_delete_my_account.sql', m0012],
+  ['0013_web_push.sql', m0013],
 ];
 
 /**

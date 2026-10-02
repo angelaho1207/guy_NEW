@@ -204,13 +204,20 @@ export function asAdmin<T = Record<string, unknown>>(
 /**
  * Runs a query with no role set, as the connection's own user.
  *
- * This bypasses row level security, so there is exactly one caller: resolving
- * a username to the address Supabase Auth knows it by, during sign-in. That
- * lookup has to happen before anyone is signed in, and `auth.users` is not
- * readable by `anon` or by `authenticated`.
+ * This bypasses row level security, so it has exactly two callers, both of
+ * which are doing something no signed-in person is allowed to do:
  *
- * Do not reach for this for anything else. Anything a person is doing goes
- * through `asUser`, which is what makes the policies mean something.
+ *   1. Resolving a username to the address Supabase Auth knows it by, during
+ *      sign-in. That lookup happens before anyone is signed in, and
+ *      `auth.users` is readable by neither `anon` nor `authenticated`.
+ *
+ *   2. The push worker, app/api/push/drain. It reads other people's
+ *      notification text, so it is not acting as a person at all: it checks a
+ *      shared secret and then calls functions that are granted to no role,
+ *      which makes that route the only path to them.
+ *
+ * Do not add a third without the same kind of reason. Anything a person is
+ * doing goes through `asUser`, which is what makes the policies mean something.
  */
 export function asOwner<T = Record<string, unknown>>(
   sql: string,

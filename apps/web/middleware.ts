@@ -27,6 +27,10 @@ const PUBLIC_PATHS = [
   // came back as a redirect to /login, and Add to Home Screen quietly stopped
   // being offered.
   '/manifest.webmanifest',
+  // The push worker authenticates with a shared secret rather than a session.
+  // Behind the sign-in redirect the database's poke would be answered with a
+  // redirect to /login and nothing would ever be sent.
+  '/api/push',
 ];
 
 export async function middleware(request: NextRequest) {
