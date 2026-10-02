@@ -6,6 +6,7 @@ import { UserSwitcher } from '@/components/UserSwitcher';
 import { currentUser, demoUsers } from '@/lib/session';
 import { asUser, usingSupabase } from '@/lib/db';
 import { signOut } from '@/app/auth-actions';
+import { midnight } from '@guy/shared';
 
 export const metadata: Metadata = {
   title: 'Guy',
@@ -17,7 +18,10 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: '#0b0b0d',
+  // Read from the token rather than written out: browser chrome cannot read a
+  // CSS variable, but it can read the same source the stylesheet mirrors. The
+  // dark ground specifically, because that is what a cold start paints.
+  themeColor: midnight.colors.background,
   // The app is a column of cards at phone width; letting it be pinch-zoomed is
   // fine, but it must not zoom just because an input was focused.
   initialScale: 1,

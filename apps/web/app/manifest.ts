@@ -1,4 +1,5 @@
 import type { MetadataRoute } from 'next';
+import { midnight } from '@guy/shared';
 
 /**
  * What makes this installable.
@@ -20,8 +21,8 @@ export default function manifest(): MetadataRoute.Manifest {
     description: 'Swap only what you choose to, with people you actually spoke to.',
     start_url: '/connect',
     display: 'standalone',
-    background_color: '#0b0b0d',
-    theme_color: '#0b0b0d',
+    background_color: midnight.colors.background,
+    theme_color: midnight.colors.background,
     orientation: 'portrait',
     icons: [
       {

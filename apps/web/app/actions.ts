@@ -8,6 +8,7 @@ import { asUser } from '@/lib/db';
 import { requireUser, currentUser, SESSION_COOKIE } from '@/lib/session';
 import {
   PROFILE_FIELDS,
+  midnight,
   connectLinkPath,
   connectCodeFromLink,
   normalizeConnectCode,
@@ -331,9 +332,10 @@ export async function mintToken() {
     type: 'svg',
     margin: 0,
     width: 200,
-    // Fixed, not themed: a scanner needs dark-on-light whichever theme the
-    // phone showing it happens to be in. Mirrors --qr-paper and --qr-ink.
-    color: { dark: '#0B0B0D', light: '#FFFFFF' },
+    // Fixed, not themed: a scanner needs dark on light whichever theme the phone
+    // showing it happens to be in. These are the qrInk/qrPaper tokens, which
+    // carry the same value in both themes for exactly this reason.
+    color: { dark: midnight.colors.qrInk, light: midnight.colors.qrPaper },
   });
 
   return { token, expiresAt: toInstantValue(expires_at), svg };
