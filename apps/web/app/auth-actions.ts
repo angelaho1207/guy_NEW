@@ -1,9 +1,11 @@
 'use server';
 
 import { redirect } from 'next/navigation';
+import { headers } from 'next/headers';
 import { revalidatePath } from 'next/cache';
 import { supabaseServer, USERNAME_PATTERN } from '@/lib/supabase';
-import { asOwner } from '@/lib/db';
+import { asOwner, asUser } from '@/lib/db';
+import { currentUser } from '@/lib/session';
 
 /**
  * Signing up and signing in.
@@ -132,6 +134,112 @@ export async function signIn(_prev: unknown, formData: FormData) {
 }
 
 export async function signOut() {
+  const supabase = await supabaseServer();
+  await supabase.auth.signOut();
+  revalidatePath('/', 'layout');
+  redirect('/login');
+}
+
+// --- Recovering an account -------------------------------------------------
+
+/**
+ * The absolute origin of this request, for links Supabase will email.
+ *
+ * Read from the request rather than configured, so it is right on localhost, on
+ * a preview deployment and in production with nothing to set.
+ */
+async function origin(): Promise<string> {
+  const head = await headers();
+  const host = head.get('x-forwarded-host') ?? head.get('host') ?? 'localhost:3000';
+  const proto =
+    head.get('x-forwarded-proto') ?? (host.startsWith('localhost') ? 'http' : 'https');
+  return `${proto}://${host}`;
+}
+
+/**
+ * Sends a reset link.
+ *
+ * Takes an email rather than a username, for two reasons. The link has to go
+ * somewhere, and only the account's own email is that somewhere. And asking for
+ * the email keeps this from becoming a way to find out which usernames exist:
+ * the reply below is identical whether or not the address has an account, which
+ * is why it says "if" rather than "we have".
+ */
+export async function requestPasswordReset(_prev: unknown, formData: FormData) {
+  const email = String(formData.get('email') ?? '').trim().toLowerCase();
+
+  if (!email.includes('@')) return { error: 'Enter the email you signed up with.' };
+
+  const supabase = await supabaseServer();
+  await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: `${await origin()}/auth/confirm?next=/reset`,
+  });
+
+  // Deliberately not reporting whether that address has an account. An error
+  // here would answer a question nobody signed in has the right to ask.
+  return {
+    sent: true as const,
+    message:
+      'If that address has an account, a link is on its way. It expires shortly, so use it soon.',
+  };
+}
+
+/**
+ * Sets a new password.
+ *
+ * Reachable only with a session, which is what the recovery link establishes
+ * when /auth/confirm verifies its token. So there is no second place to check
+ * that the person is allowed to do this: having a session IS the proof.
+ */
+export async function setNewPassword(_prev: unknown, formData: FormData) {
+  const password = String(formData.get('password') ?? '');
+  const again = String(formData.get('password_again') ?? '');
+
+  if (password.length < 8) return { error: 'Use at least eight characters.' };
+  if (password !== again) return { error: 'Those two do not match.' };
+
+  const supabase = await supabaseServer();
+  const { error } = await supabase.auth.updateUser({ password });
+
+  if (error) {
+    return {
+      error:
+        'That link has expired or was already used. Ask for a new one and try again.',
+    };
+  }
+
+  revalidatePath('/', 'layout');
+  redirect('/contacts');
+}
+
+// --- Leaving ---------------------------------------------------------------
+
+/**
+ * Deletes the account, and everything that hangs off it.
+ *
+ * The work is in `public.delete_my_account()`, which runs as the migration owner
+ * because a person cannot be given rights over `auth.users` without being given
+ * rights over everyone in it. Deleting the profile row cascades through the
+ * shares, the connections, the notes, the reminders and the tokens, and the
+ * other person's notes about you go with it. That is D10, decided deliberately.
+ */
+export async function deleteAccount(_prev: unknown, formData: FormData) {
+  const me = await currentUser();
+  if (!me) redirect('/login');
+
+  // Typing the username is the confirmation. A dialog that only needs a tap is
+  // not a confirmation for something that cannot be undone.
+  const typed = String(formData.get('username') ?? '').trim().toLowerCase();
+  if (typed !== me.username) {
+    return { error: `Type ${me.username} exactly, to confirm.` };
+  }
+
+  try {
+    await asUser(me.user_id, `select public.delete_my_account()`);
+  } catch (err) {
+    return { error: String((err as Error)?.message ?? err).replace(/^error: /i, '') };
+  }
+
   const supabase = await supabaseServer();
   await supabase.auth.signOut();
   revalidatePath('/', 'layout');

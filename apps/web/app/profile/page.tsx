@@ -2,6 +2,8 @@ import { asUser } from '@/lib/db';
 import { requireUser } from '@/lib/session';
 import { ProfileForm } from '@/components/ProfileForm';
 import { ThemeToggle } from '@/components/ThemeToggle';
+import { DeleteAccount } from '@/components/DeleteAccount';
+import { usingSupabase } from '@/lib/db';
 
 export const dynamic = 'force-dynamic';
 
@@ -40,6 +42,10 @@ export default async function ProfilePage() {
 
       <h2>Settings</h2>
       <ThemeToggle />
+
+      {/* The demo database has no real accounts to delete, and its people are
+          seeded fresh on every restart. */}
+      {usingSupabase && <DeleteAccount username={me.username} />}
     </>
   );
 }

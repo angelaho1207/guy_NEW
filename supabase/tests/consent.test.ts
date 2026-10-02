@@ -358,3 +358,84 @@ describe('notes stay private', () => {
     }
   });
 });
+
+describe('leaving', () => {
+  // There was no way out of the app at all until 0012. What matters here is not
+  // that the row goes, but that nothing of the person is left behind in anyone
+  // else's data -- including the notes other people wrote about them, which is
+  // D10 and is the part someone would be surprised by.
+  test('deleting an account takes everything with it', async () => {
+    const quitter = await db.createUser('quitter', 'Quinn', 'Quitter');
+    const other = await db.createUser('stayer', 'Sam', 'Stayer');
+    await completeExchange(quitter, other);
+
+    // The person who stays writes a private note about the person who leaves.
+    const conn = row<{ id: string }>(
+      await db.admin(
+        `select id from public.connections where owner_id = '${other}' and other_id = '${quitter}'`,
+      ),
+    );
+    // A note belongs to a connection, not to an author: there is only ever one
+    // person who can write on a connection, and that is its owner.
+    // A note belongs to a connection, not to an author: only the connection's
+    // owner can write on it. Its id is captured because other tests in this file
+    // leave notes of their own, and counting the whole table would be measuring
+    // them instead of this.
+    const note = row<{ id: string }>(
+      await db.as(
+        other,
+        `insert into public.connection_notes (connection_id, body)
+         values ($1, 'met at the thing') returning id`,
+        [conn.id],
+      ),
+    );
+
+    await db.as(quitter, `select public.delete_my_account()`);
+
+    const counts = row<Record<string, number>>(
+      await db.admin(
+        `select
+           (select count(*)::int from public.profiles where user_id = '${quitter}') as profile,
+           (select count(*)::int from public.profile_field_shares where user_id = '${quitter}') as shares,
+           (select count(*)::int from public.connections
+             where owner_id = '${quitter}' or other_id = '${quitter}') as connections,
+           (select count(*)::int from public.connection_notes
+             where id = '${note.id}') as notes,
+           (select count(*)::int from auth.users where id = '${quitter}') as account`,
+      ),
+    );
+
+    assert.equal(Number(counts.profile), 0, 'the profile is gone');
+    assert.equal(Number(counts.shares), 0, 'the sharing toggles are gone');
+    assert.equal(Number(counts.connections), 0, 'both directions are gone');
+    assert.equal(Number(counts.notes), 0, "the other person's notes went too: see D10");
+    assert.equal(Number(counts.account), 0, 'and the account itself');
+  });
+
+  test('it takes no argument, so it cannot be aimed at anyone else', async () => {
+    // The guard that matters. A function that accepted a user id would be a
+    // delete-anyone button granted to every signed-in account.
+    const args = row<{ n: number }>(
+      await db.admin(
+        `select count(*)::int as n
+           from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+          where n.nspname = 'public' and p.proname = 'delete_my_account'
+            and p.pronargs = 0`,
+      ),
+    );
+    assert.equal(Number(args.n), 1, 'delete_my_account must take no arguments');
+  });
+
+  test('the person who stays is untouched', async () => {
+    const stayer = await db.createUser('stayer2', 'Sam', 'Stayer');
+    const quitter = await db.createUser('quitter2', 'Quinn', 'Quitter');
+    await completeExchange(stayer, quitter);
+
+    await db.as(quitter, `select public.delete_my_account()`);
+
+    const still = row<{ n: number }>(
+      await db.admin(`select count(*)::int as n from public.profiles where user_id = '${stayer}'`),
+    );
+    assert.equal(Number(still.n), 1);
+  });
+});

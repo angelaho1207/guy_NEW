@@ -1,4 +1,4 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import Link from 'next/link';
 import './globals.css';
 import { Nav, TopLink } from '@/components/Nav';
@@ -10,6 +10,18 @@ import { signOut } from '@/app/auth-actions';
 export const metadata: Metadata = {
   title: 'Guy',
   description: 'Consent-based, tap-to-share networking.',
+  // Opened from the home screen this fills the screen, including behind the
+  // notch, which is why the bars carry safe-area padding.
+  appleWebApp: { capable: true, statusBarStyle: 'black-translucent', title: 'Guy' },
+  icons: { icon: '/icon.svg', apple: '/icon.svg' },
+};
+
+export const viewport: Viewport = {
+  themeColor: '#0b0b0d',
+  // The app is a column of cards at phone width; letting it be pinch-zoomed is
+  // fine, but it must not zoom just because an input was focused.
+  initialScale: 1,
+  width: 'device-width',
 };
 
 export const dynamic = 'force-dynamic';

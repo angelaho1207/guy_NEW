@@ -12,7 +12,17 @@ import { createServerClient } from '@supabase/ssr';
  * accounts at all, so this steps aside entirely.
  */
 
-const PUBLIC_PATHS = ['/login', '/signup'];
+const PUBLIC_PATHS = [
+  '/login',
+  '/signup',
+  // Recovery happens while signed out, and /auth/confirm is what turns the
+  // emailed token into the session that /reset then needs.
+  '/forgot',
+  '/auth/confirm',
+  // Readable by anyone, including the app stores, which require a reachable
+  // policy before they will review anything.
+  '/privacy',
+];
 
 export async function middleware(request: NextRequest) {
   if (!process.env.NEXT_PUBLIC_SUPABASE_URL) return NextResponse.next();
