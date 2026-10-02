@@ -163,6 +163,7 @@ describe('text clears WCAG AA on its own ground', () => {
     // past where they look right in isolation.
     'warnInk',
     'goInk',
+    'link',
   ];
 
   for (const [name, theme] of PAIRS) {
@@ -190,6 +191,40 @@ describe('text clears WCAG AA on its own ground', () => {
       ['gradPeriwinkle', 'gradPeriwinkleInk'],
       ['gradDusk', 'gradDuskInk'],
     ];
+
+    test(`${name}: hero ink against the top of the wash`, () => {
+      // Checked against the FIRST stop, not the darkest one, because the wash's
+      // last stop is the page background by design -- it fades out. The
+      // headline sits in the top third, which is the only place this ink is
+      // readable, and .hero's padding is what keeps it there.
+      const first = stops(theme.colors.heroWash)[0];
+      const ratio = contrast(theme.colors.heroInk, first);
+      assert.ok(
+        ratio >= 4.5,
+        `heroInk is ${ratio.toFixed(2)}:1 on the wash's first stop`,
+      );
+    });
+
+    test(`${name}: the wash ends at the page background`, () => {
+      // What makes it a wash rather than a band. If this ever drifts, the hero
+      // gains a hard horizontal edge across the page.
+      const last = stops(theme.colors.heroWash).at(-1);
+      assert.equal(
+        last?.toLowerCase(),
+        theme.colors.background.toLowerCase(),
+        'the final stop must be the background of this same theme',
+      );
+    });
+
+    test(`${name}: the wash is wider than the pill gradient`, () => {
+      // The bug this exists to prevent: painting `celebrate` over a few hundred
+      // pixels, where its two close stops read as a flat slab rather than a
+      // gradient. The wash needs three stops to do its job.
+      assert.ok(
+        stops(theme.colors.heroWash).length >= 3,
+        'heroWash needs at least three stops to read as a gradient at size',
+      );
+    });
 
     for (const [gradient, ink] of inked) {
       test(`${name}: ${ink} on ${gradient}, at its darkest stop`, () => {

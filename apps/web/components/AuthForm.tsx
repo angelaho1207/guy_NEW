@@ -76,14 +76,24 @@ export function AuthForm({ mode }: { mode: 'signup' | 'login' }) {
         </p>
       )}
 
-      <div className="btn-row" style={{ marginTop: 4 }}>
-        <button className="btn btn-primary" disabled={pending}>
-          {pending ? 'One moment…' : isSignup ? 'Create account' : 'Sign in'}
-        </button>
-        <Link className="btn btn-quiet" href={isSignup ? '/login' : '/signup'}>
-          {isSignup ? 'I already have an account' : 'Create an account'}
+      <button className="btn btn-primary btn-tall" style={{ marginTop: 4 }} disabled={pending}>
+        {pending ? 'One moment…' : isSignup ? 'Create account' : 'Sign in'}
+      </button>
+
+      <p
+        className="tiny"
+        style={{
+          margin: '16px 0 0',
+          display: 'flex',
+          gap: 8,
+          justifyContent: 'center',
+        }}
+      >
+        <span>{isSignup ? 'Already have one?' : 'No account yet?'}</span>
+        <Link className="handle-link" href={isSignup ? '/login' : '/signup'}>
+          {isSignup ? 'Sign in' : 'Make one'}
         </Link>
-      </div>
+      </p>
     </form>
   );
 }

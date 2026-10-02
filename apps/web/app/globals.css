@@ -41,6 +41,11 @@
   --celebrate: linear-gradient(140deg, #f8c4ff 0%, #f0b6e0 100%);
   --celebrate-ink: #2e0f28;
 
+  --hero-wash: linear-gradient(165deg, #f8c4ff 0%, #c9b6f0 48%, #0b0b0d 100%);
+  --hero-ink: #2e0f28;
+  --meter-fill: linear-gradient(90deg, #f8c4ff 0%, #ffd88a 100%);
+  --link: #f8c4ff;
+
   --grad-bloom: linear-gradient(140deg, #f8c4ff 0%, #f0b6e0 100%);
   --grad-bloom-ink: #3a1733;
   --grad-periwinkle: linear-gradient(140deg, #96c4ff 0%, #c9b6f0 100%);
@@ -85,6 +90,11 @@
 
   --celebrate: linear-gradient(140deg, #f8c4ff 0%, #f0b6e0 100%);
   --celebrate-ink: #2e0f28;
+
+  --hero-wash: linear-gradient(165deg, #f8c4ff 0%, #c9b6f0 46%, #ffffff 100%);
+  --hero-ink: #000000;
+  --meter-fill: linear-gradient(90deg, #f8c4ff 0%, #ffd88a 100%);
+  --link: #000000;
 
   --grad-bloom: linear-gradient(140deg, #f8c4ff 0%, #f0b6e0 100%);
   --grad-bloom-ink: #3a1733;
@@ -287,11 +297,11 @@ h3 {
  */
 .hero {
   margin: -8px -16px 0;
-  padding: 52px 20px 36px;
-  background: var(--celebrate);
-  color: var(--celebrate-ink);
-  border-bottom-left-radius: var(--radius-lg);
-  border-bottom-right-radius: var(--radius-lg);
+  min-height: 300px;
+  box-sizing: border-box;
+  padding: 44px 24px 0;
+  background: var(--hero-wash);
+  color: var(--hero-ink);
 }
 
 /* The wordmark, sitting inside the wash rather than above it. */
@@ -301,27 +311,26 @@ h3 {
   font-size: 26px;
   font-weight: 700;
   letter-spacing: -0.02em;
-  color: var(--celebrate-ink);
-  margin-bottom: 16px;
+  color: var(--hero-ink);
 }
 
 .hero-title {
-  margin: 0;
+  margin: 18px 0 0;
   font-family: var(--font-display);
   font-size: 52px;
   font-weight: 600;
   line-height: 0.98;
   letter-spacing: -0.03em;
-  color: var(--celebrate-ink);
+  color: var(--hero-ink);
 }
 
-@media (max-width: 560px) {
+@media (max-width: 400px) {
   .hero {
-    padding: 40px 16px 28px;
+    padding: 40px 16px 0;
   }
 
   .hero-title {
-    font-size: 42px;
+    font-size: 44px;
   }
 }
 
@@ -341,7 +350,7 @@ h3 {
   display: block;
   height: 3px;
   border-radius: 3px;
-  background: var(--celebrate);
+  background: var(--meter-fill);
 }
 
 /* A row of people: avatar, who they are, what to do about them. */
@@ -356,6 +365,23 @@ h3 {
   min-width: 0;
   display: flex;
   flex-direction: column;
+}
+
+/* 34px: a page-level heading on a screen that already says where it is. */
+.section-title {
+  font-family: var(--font-display);
+  font-size: 34px;
+  font-weight: 600;
+  line-height: 1.04;
+  letter-spacing: -0.03em;
+  margin: 0;
+}
+
+/* The one button on a screen with nothing else to do. */
+.btn-tall {
+  width: 100%;
+  min-height: 52px;
+  font-size: 17px;
 }
 
 /* A section label: small, wide, quiet. Used where a heading would shout. */
@@ -499,7 +525,7 @@ h3 {
 .field-label {
   display: block;
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
   color: var(--text-secondary);
   margin-bottom: 6px;
 }
@@ -510,10 +536,12 @@ input[type='number'],
 textarea,
 select {
   width: 100%;
-  background: var(--bg);
+  min-height: 48px;
+  background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  font-size: 16px;
   outline: none;
 }
 
@@ -697,10 +725,15 @@ textarea {
 }
 
 .handle-link {
-  color: var(--text-primary);
+  color: var(--link);
   text-decoration: none;
-  border-bottom: 1px solid var(--accent);
+  border-bottom: 1px solid currentColor;
   padding-bottom: 1px;
+}
+
+:root[data-theme='daylight'] .handle-link {
+  text-decoration: underline;
+  border-bottom: none;
 }
 
 .handle-link:hover {

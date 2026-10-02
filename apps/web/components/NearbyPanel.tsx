@@ -124,7 +124,7 @@ export function NearbyPanel() {
 
   return (
     <section>
-      <h2 style={{ marginTop: 0 }}>Who else is here</h2>
+      <h1 className="section-title">Who else is here</h1>
 
       {status === 'on' && (
         <div

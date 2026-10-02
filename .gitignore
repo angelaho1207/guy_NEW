@@ -17,3 +17,6 @@ xcuserdata/
 .vercel
 coverage/
 *.tsbuildinfo
+
+# the demo dev server's own build output
+apps/web/.next-demo/

@@ -42,37 +42,37 @@ export default async function ConnectPage() {
     <>
       <PendingWatcher />
 
-      <h1>Connect</h1>
-      <p className="lede">
+      {/*
+        No "Connect" heading, and no "Waiting on you" heading: the nav already
+        says which screen this is, and a prompt that opens with "Share with
+        Marcus?" does not need a label above it. The mockups omit both, and the
+        space goes to the two things that matter here.
+      */}
+      <p className="lede" style={{ marginTop: 20, fontSize: 14 }}>
         If you both have this screen open, you will see each other below. Both
         of you confirm before anything is shared, either way.
       </p>
 
-      {pending.length > 0 && (
-        <>
-          <h2>Waiting on you</h2>
-          {pending.map((p) => (
-            <ConfirmPrompt
-              key={p.id}
-              exchangeId={p.id}
-              peerName={p.peer_name}
-              expiresAt={toInstantValue(p.expires_at)}
-              youConfirmed={p.you_confirmed}
-            />
-          ))}
-        </>
-      )}
+      {pending.map((p) => (
+        <ConfirmPrompt
+          key={p.id}
+          exchangeId={p.id}
+          peerName={p.peer_name}
+          expiresAt={toInstantValue(p.expires_at)}
+          youConfirmed={p.you_confirmed}
+        />
+      ))}
 
-      <h2>Nearby</h2>
       <NearbyPanel />
 
-      <h2>Or use a code</h2>
-      <p className="tiny" style={{ marginTop: -4 }}>
+      <div className="eyebrow" style={{ marginTop: 28 }}>
+        Or use a code
+      </div>
+      <p className="tiny" style={{ margin: '6px 0 12px' }}>
         For when location is off, or the two of you are further apart than the
         list reaches.
       </p>
       <CodePanel />
-
 
       <ScanBox />
     </>

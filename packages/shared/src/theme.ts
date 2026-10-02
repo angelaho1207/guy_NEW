@@ -53,8 +53,36 @@ export type ThemeColors = {
   danger: string;
   success: string;
 
-  /** The expressive gradient. Decoration only: never a control. */
+  /**
+   * The expressive gradient. Decoration only: never a control.
+   *
+   * Deliberately tight -- two close stops -- because it is used on pills and
+   * small surfaces. It is the WRONG gradient for a large area: over a few
+   * hundred pixels two close stops read as a flat slab, which is what
+   * `heroWash` exists to avoid.
+   */
   celebrate: string;
+
+  /**
+   * The wash behind a sign-in headline.
+   *
+   * Three stops, and the last one is this theme's own background, which is what
+   * makes it fade into the page rather than end in a hard edge. That final stop
+   * is why this cannot be one shared value across themes.
+   */
+  heroWash: string;
+  /** Text on the wash. Plum on midnight, black on daylight. */
+  heroInk: string;
+
+  /** The confirmation countdown's fill: pink into amber, horizontally. */
+  meterFill: string;
+
+  /**
+   * A link inside body copy. Celebratory on midnight, where a pastel reads well
+   * against black; plain ink on daylight, where it is underlined instead,
+   * because the reference uses no coloured links on white at all.
+   */
+  link: string;
 
   /**
    * The three avatar gradients, each with the ink that sits on it.
@@ -137,6 +165,11 @@ export const midnight: Theme = {
     celebrate: 'linear-gradient(140deg, #F8C4FF 0%, #F0B6E0 100%)',
     celebrateInk: '#2E0F28',
 
+    heroWash: 'linear-gradient(165deg, #F8C4FF 0%, #C9B6F0 48%, #0B0B0D 100%)',
+    heroInk: '#2E0F28',
+    meterFill: 'linear-gradient(90deg, #F8C4FF 0%, #FFD88A 100%)',
+    link: '#F8C4FF',
+
     gradBloom: 'linear-gradient(140deg, #F8C4FF 0%, #F0B6E0 100%)',
     gradBloomInk: '#3A1733',
     gradPeriwinkle: 'linear-gradient(140deg, #96C4FF 0%, #C9B6F0 100%)',
@@ -183,6 +216,11 @@ export const daylight: Theme = {
 
     celebrate: 'linear-gradient(140deg, #F8C4FF 0%, #F0B6E0 100%)',
     celebrateInk: '#2E0F28',
+
+    heroWash: 'linear-gradient(165deg, #F8C4FF 0%, #C9B6F0 46%, #FFFFFF 100%)',
+    heroInk: '#000000',
+    meterFill: 'linear-gradient(90deg, #F8C4FF 0%, #FFD88A 100%)',
+    link: '#000000',
 
     gradBloom: 'linear-gradient(140deg, #F8C4FF 0%, #F0B6E0 100%)',
     gradBloomInk: '#3A1733',

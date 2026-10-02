@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "dev:demo": "node scripts/dev-demo.mjs"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.5.8",

@@ -1,5 +1,12 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Lets a second dev server build somewhere else. `next dev` and `next build`
+  // both write to `.next` and corrupt each other -- the symptom is the dev
+  // server serving a 404 for its own stylesheet, which looks exactly like a
+  // catastrophic CSS bug. `npm run dev:demo` sets this so it can run beside the
+  // ordinary dev server instead of fighting it.
+  distDir: process.env.GUY_DIST_DIR || '.next',
+
   // Both of these must stay real Node modules on the server rather than being
   // bundled. PGlite is a WebAssembly build of Postgres, and `pg` loads `fs`
   // conditionally at runtime in a way webpack cannot follow.
