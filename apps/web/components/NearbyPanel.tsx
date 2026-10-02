@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { avatarGradient } from '@guy/shared';
 import {
   heartbeatPresence,
   leavePresence,
@@ -122,18 +123,22 @@ export function NearbyPanel() {
   };
 
   return (
-    <div className="card">
-      <div className="row-head">
-        <h3 style={{ margin: 0 }}>Who else is here</h3>
-        {status === 'on' && (
-          <span className="pill" data-tone="accent">
-            You are visible
-          </span>
-        )}
-      </div>
+    <section>
+      <h2 style={{ marginTop: 0 }}>Who else is here</h2>
+
+      {status === 'on' && (
+        <div
+          className="person"
+          style={{ gap: 7, marginBottom: 14 }}
+          aria-live="polite"
+        >
+          <span className="dot" data-live="true" />
+          <span className="tiny">You are visible &middot; stops when you leave</span>
+        </div>
+      )}
 
       {status === 'off' && (
-        <>
+        <div className="card">
           <p className="tiny" style={{ marginTop: 0 }}>
             Both of you open this screen, and you will see each other. Tapping a
             name only asks — nothing is shared until you both confirm.
@@ -146,7 +151,7 @@ export function NearbyPanel() {
           <button className="btn btn-primary" onClick={start}>
             Show me who&rsquo;s nearby
           </button>
-        </>
+        </div>
       )}
 
       {status === 'starting' && (
@@ -156,7 +161,7 @@ export function NearbyPanel() {
       )}
 
       {status === 'denied' && (
-        <>
+        <div className="card">
           <p className="tiny" style={{ marginTop: 0, color: 'var(--danger)' }}>
             Location is turned off for this site, so there is no way to tell who
             is near you. Use the code below instead, or turn location on in your
@@ -165,7 +170,7 @@ export function NearbyPanel() {
           <button className="btn btn-quiet" onClick={start}>
             Try again
           </button>
-        </>
+        </div>
       )}
 
       {status === 'unsupported' && (
@@ -175,14 +180,14 @@ export function NearbyPanel() {
       )}
 
       {status === 'error' && (
-        <>
+        <div className="card">
           <p className="tiny" style={{ marginTop: 0, color: 'var(--danger)' }}>
             {detail ?? 'Something went wrong.'}
           </p>
           <button className="btn btn-quiet" onClick={start}>
             Try again
           </button>
-        </>
+        </div>
       )}
 
       {status === 'on' && (
@@ -194,15 +199,24 @@ export function NearbyPanel() {
               seconds.
             </p>
           ) : (
-            <div style={{ marginTop: 4 }}>
+            <div>
               {people.map((p) => (
-                <div className="card card-tight row-head" key={p.user_id}>
-                  <div>
-                    <strong>{p.display_name}</strong>
-                    <div className="tiny">{distance(p)}</div>
-                  </div>
+                <div className="card card-tight person" key={p.user_id}>
+                  <span
+                    className="avatar"
+                    data-grad={avatarGradient(p.user_id)}
+                    aria-hidden="true"
+                  >
+                    {peerInitials(p.display_name)}
+                  </span>
+                  <span className="grow">
+                    <span style={{ fontSize: 16, fontWeight: 600 }}>
+                      {p.display_name}
+                    </span>
+                    <span className="tiny">{distance(p)}</span>
+                  </span>
                   {p.already_connected ? (
-                    <span className="pill">Already connected</span>
+                    <span className="pill">Already</span>
                   ) : (
                     <button
                       className="btn btn-primary"
@@ -230,8 +244,23 @@ export function NearbyPanel() {
           </div>
         </>
       )}
-    </div>
+    </section>
   );
+}
+
+/**
+ * Initials for the avatar.
+ *
+ * Works off the display name, which is all the nearby list carries and is
+ * already either a full name or a username, depending on what that person
+ * currently shares. One word gives one letter rather than two from the middle
+ * of it.
+ */
+function peerInitials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return '?';
+  if (parts.length === 1) return parts[0][0].toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
 
 /**

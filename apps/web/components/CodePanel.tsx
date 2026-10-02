@@ -69,7 +69,7 @@ export function CodePanel() {
             {seconds !== null && (
               <>
                 {' '}
-                <span className="pill" data-tone={seconds < 20 ? 'accent' : undefined}>
+                <span className="pill" data-tone={seconds < 20 ? 'warn' : undefined}>
                   {seconds}s
                 </span>
               </>

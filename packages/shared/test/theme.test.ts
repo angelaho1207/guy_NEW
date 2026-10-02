@@ -3,7 +3,15 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { themes, midnight, daylight, colors, type ThemeColors } from '../src/theme.ts';
+import {
+  themes,
+  midnight,
+  daylight,
+  colors,
+  avatarGradient,
+  AVATAR_GRADIENTS,
+  type ThemeColors,
+} from '../src/theme.ts';
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 const css = readFileSync(
@@ -150,6 +158,11 @@ describe('text clears WCAG AA on its own ground', () => {
     'textMuted',
     'danger',
     'success',
+    // The semantic pill inks. These are the dangerous ones: amber and green
+    // read fine on near-black and fail outright on white unless darkened well
+    // past where they look right in isolation.
+    'warnInk',
+    'goInk',
   ];
 
   for (const [name, theme] of PAIRS) {
@@ -168,15 +181,27 @@ describe('text clears WCAG AA on its own ground', () => {
       assert.ok(ratio >= 4.5, `onAccent is ${ratio.toFixed(2)}:1 on the accent`);
     });
 
-    test(`${name}: ink on the celebrate gradient, at its darkest stop`, () => {
-      const worst = stops(theme.colors.celebrate)
-        .map((stop) => contrast(theme.colors.celebrateInk, stop))
-        .sort((a, b) => a - b)[0];
-      assert.ok(
-        worst >= 4.5,
-        `celebrateInk is ${worst.toFixed(2)}:1 on the gradient's darkest stop`,
-      );
-    });
+    // Every gradient carries ink, and a gradient's worst stop is what decides
+    // whether that ink can be read. Initials on an avatar are small text on a
+    // pastel, which is exactly where this goes wrong quietly.
+    const inked: [keyof ThemeColors, keyof ThemeColors][] = [
+      ['celebrate', 'celebrateInk'],
+      ['gradBloom', 'gradBloomInk'],
+      ['gradPeriwinkle', 'gradPeriwinkleInk'],
+      ['gradDusk', 'gradDuskInk'],
+    ];
+
+    for (const [gradient, ink] of inked) {
+      test(`${name}: ${ink} on ${gradient}, at its darkest stop`, () => {
+        const worst = stops(theme.colors[gradient])
+          .map((stop) => contrast(theme.colors[ink], stop))
+          .sort((a, b) => a - b)[0];
+        assert.ok(
+          worst >= 4.5,
+          `${ink} is ${worst.toFixed(2)}:1 on ${gradient}'s darkest stop`,
+        );
+      });
+    }
   }
 });
 
@@ -234,6 +259,48 @@ describe('every theme is reachable', () => {
         css.includes(`[data-theme='${name}']`),
         `globals.css has no [data-theme='${name}'] block, so the toggle cannot reach it`,
       );
+    }
+  });
+});
+
+describe('avatar gradients', () => {
+  test('there is a token pair for every gradient in the list', () => {
+    // The list and the tokens are two copies of the same knowledge, and a
+    // mismatch is an avatar rendered with no background at all.
+    for (const which of AVATAR_GRADIENTS) {
+      const key = `grad${which[0].toUpperCase()}${which.slice(1)}` as keyof ThemeColors;
+      for (const [name, theme] of PAIRS) {
+        assert.ok(theme.colors[key], `${name} has no ${key}`);
+        assert.ok(theme.colors[`${key}Ink` as keyof ThemeColors], `${name} has no ${key}Ink`);
+      }
+    }
+  });
+
+  test('the same person always gets the same gradient', () => {
+    const id = '12382552-2750-466d-a76a-f8143cc8c07c';
+    assert.equal(avatarGradient(id), avatarGradient(id));
+  });
+
+  test('it only ever returns one of the three', () => {
+    for (let i = 0; i < 200; i += 1) {
+      assert.ok(
+        (AVATAR_GRADIENTS as readonly string[]).includes(avatarGradient(`user-${i}`)),
+      );
+    }
+  });
+
+  test('it spreads across all three rather than favouring one', () => {
+    // Not a distribution guarantee, just a guard against a hash that collapses:
+    // every avatar coming out the same colour would look deliberate and be a bug.
+    const seen = new Set<string>();
+    for (let i = 0; i < 60; i += 1) seen.add(avatarGradient(`user-${i}`));
+    assert.equal(seen.size, AVATAR_GRADIENTS.length);
+  });
+
+  test('a missing or blank id still gets a gradient', () => {
+    // Better a predictable colour than an avatar with no background.
+    for (const seed of [null, undefined, '', '   ']) {
+      assert.ok((AVATAR_GRADIENTS as readonly string[]).includes(avatarGradient(seed)));
     }
   });
 });

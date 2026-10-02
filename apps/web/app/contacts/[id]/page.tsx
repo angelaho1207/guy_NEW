@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { asUser } from '@/lib/db';
 import { requireUser } from '@/lib/session';
+import { avatarGradient } from '@guy/shared';
 import { Card, cardName, initials, type ContactCard } from '@/components/Card';
 import { ReminderForm } from '@/components/ReminderForm';
 import { toDateValue, formatDate, formatInstant } from '@/lib/dates';
@@ -95,7 +96,12 @@ export default async function ContactPage({
       </p>
 
       <div className="with-avatar" style={{ alignItems: 'center', marginTop: 12 }}>
-        <span className="avatar" style={{ width: 52, height: 52, fontSize: 18 }}>
+        <span
+          className="avatar"
+          data-grad={avatarGradient(contact.other_id)}
+          style={{ width: 52, height: 52, fontSize: 18 }}
+          aria-hidden="true"
+        >
           {initials(contact.card)}
         </span>
         <div>

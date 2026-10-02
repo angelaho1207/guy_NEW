@@ -6,6 +6,7 @@ export default function LoginPage() {
   return (
     <>
       <div className="hero">
+        <span className="hero-mark">Guy.</span>
         <h1 className="hero-title">
           You met.
           <br />
@@ -16,6 +17,10 @@ export default function LoginPage() {
         Swap only what you choose to, with people you actually spoke to.
       </p>
       <AuthForm mode="login" />
+      <p className="tiny" style={{ margin: '20px 0 0', color: 'var(--text-muted)' }}>
+        Nothing about you is visible to anyone until you both tap confirm,
+        standing in the same room.
+      </p>
     </>
   );
 }

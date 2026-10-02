@@ -55,6 +55,38 @@ export type ThemeColors = {
 
   /** The expressive gradient. Decoration only: never a control. */
   celebrate: string;
+
+  /**
+   * The three avatar gradients, each with the ink that sits on it.
+   *
+   * Which one a person gets is derived from their id, not from their position
+   * in a list: a contact that changed colour when the list reordered would be
+   * worse than no colour at all. See `avatarGradient`.
+   *
+   * All three are light in both themes, like `celebrate`, so all three inks are
+   * dark in both themes.
+   */
+  gradBloom: string;
+  gradBloomInk: string;
+  gradPeriwinkle: string;
+  gradPeriwinkleInk: string;
+  gradDusk: string;
+  gradDuskInk: string;
+
+  /**
+   * Two semantic pill families: `warn` counts down, `go` is settled.
+   *
+   * Each is an edge, a low-opacity fill, and the ink that has to be read on the
+   * page background. Amber and green ink both fail AA on white almost by
+   * default, so the light values are darkened well past their midnight
+   * counterparts and the contrast test checks every one of them.
+   */
+  warn: string;
+  warnSubtle: string;
+  warnInk: string;
+  go: string;
+  goSubtle: string;
+  goInk: string;
   /** Text laid over `celebrate`. Dark in both themes, because the gradient is. */
   celebrateInk: string;
   /** The bloom a celebratory surface casts on the ground behind it. */
@@ -104,6 +136,21 @@ export const midnight: Theme = {
 
     celebrate: 'linear-gradient(140deg, #F8C4FF 0%, #F0B6E0 100%)',
     celebrateInk: '#2E0F28',
+
+    gradBloom: 'linear-gradient(140deg, #F8C4FF 0%, #F0B6E0 100%)',
+    gradBloomInk: '#3A1733',
+    gradPeriwinkle: 'linear-gradient(140deg, #96C4FF 0%, #C9B6F0 100%)',
+    gradPeriwinkleInk: '#15213A',
+    gradDusk: 'linear-gradient(140deg, #FFD88A 0%, #F8A0C0 100%)',
+    gradDuskInk: '#3A2410',
+
+    warn: '#FFAE00',
+    warnSubtle: 'rgba(255, 174, 0, 0.16)',
+    warnInk: '#FFD68A',
+    go: '#31C431',
+    goSubtle: 'rgba(49, 196, 49, 0.16)',
+    goInk: '#8FE88F',
+
     glow: 'rgba(248, 196, 255, 0.16)',
     celebrateEdge: '#F8C4FF',
     scrim: 'rgba(11, 11, 13, 0.85)',
@@ -136,6 +183,21 @@ export const daylight: Theme = {
 
     celebrate: 'linear-gradient(140deg, #F8C4FF 0%, #F0B6E0 100%)',
     celebrateInk: '#2E0F28',
+
+    gradBloom: 'linear-gradient(140deg, #F8C4FF 0%, #F0B6E0 100%)',
+    gradBloomInk: '#3A1733',
+    gradPeriwinkle: 'linear-gradient(140deg, #96C4FF 0%, #C9B6F0 100%)',
+    gradPeriwinkleInk: '#15213A',
+    gradDusk: 'linear-gradient(140deg, #FFD88A 0%, #F8A0C0 100%)',
+    gradDuskInk: '#3A2410',
+
+    warn: '#B37A00',
+    warnSubtle: 'rgba(255, 174, 0, 0.18)',
+    warnInk: '#7A4B00',
+    go: '#1E9E35',
+    goSubtle: 'rgba(49, 196, 49, 0.16)',
+    goInk: '#176B33',
+
     glow: 'rgba(0, 0, 0, 0.1)',
     celebrateEdge: 'transparent',
     scrim: 'rgba(255, 255, 255, 0.85)',
@@ -161,6 +223,33 @@ export const DEFAULT_THEME: ThemeName = 'midnight';
 export const colors = midnight.colors;
 
 export type ColorToken = keyof ThemeColors;
+
+/** The avatar gradients, in the order `avatarGradient` indexes them. */
+export const AVATAR_GRADIENTS = ['bloom', 'periwinkle', 'dusk'] as const;
+
+export type AvatarGradient = (typeof AVATAR_GRADIENTS)[number];
+
+/**
+ * Which gradient a person's avatar gets.
+ *
+ * Derived from their id so it is stable: the same person is always the same
+ * colour, on every screen, for every viewer, forever. Picking by list position
+ * would be easier and would mean a contact changed colour whenever the list
+ * reordered, which turns a useful recognition cue into noise.
+ *
+ * An unremarkable string hash is plenty here. Nothing depends on it being hard
+ * to predict, only on it being the same answer every time.
+ */
+export function avatarGradient(seed: string | null | undefined): AvatarGradient {
+  const text = (seed ?? '').trim();
+  if (text === '') return AVATAR_GRADIENTS[0];
+
+  let hash = 0;
+  for (let i = 0; i < text.length; i += 1) {
+    hash = (hash * 31 + text.charCodeAt(i)) % 0x7fffffff;
+  }
+  return AVATAR_GRADIENTS[hash % AVATAR_GRADIENTS.length];
+}
 
 export const space = {
   xs: 4,

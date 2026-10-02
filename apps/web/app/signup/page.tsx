@@ -6,6 +6,7 @@ export default function SignupPage() {
   return (
     <>
       <div className="hero">
+        <span className="hero-mark">Guy.</span>
         <h1 className="hero-title">
           Start with
           <br />

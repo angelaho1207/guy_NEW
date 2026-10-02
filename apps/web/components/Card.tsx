@@ -62,7 +62,14 @@ function Value({ field, card }: { field: ProfileField; card: ContactCard }) {
 
   if (raw === undefined) return null;
   if (raw === EMPTY_SHARED_VALUE) {
-    return <span className="blank" title="Shared, but they left it blank">—</span>;
+    // The same character EMPTY_SHARED_VALUE is, so the UI and the contract
+    // agree. An em dash here read as a different thing from the "-" the rest of
+    // the system talks about.
+    return (
+      <span className="blank" title="Shared, but they left it blank">
+        {EMPTY_SHARED_VALUE}
+      </span>
+    );
   }
 
   if (isHandleField(field)) {

@@ -66,7 +66,7 @@ export default async function OneOnOnePage({
 
       <div className="row-head" style={{ marginTop: 12 }}>
         <h1 style={{ margin: 0 }}>{req.peer_name}</h1>
-        <span className="pill" data-tone={req.status === 'scheduled' ? 'accent' : undefined}>
+        <span className="pill" data-tone={req.status === 'scheduled' ? 'celebrate' : undefined}>
           {req.status}
         </span>
       </div>

@@ -43,27 +43,21 @@ export function ConfirmPrompt({
     <div className={expired ? 'card' : 'card glowing'}>
       <div className="row-head">
         <h2 style={{ margin: 0, fontSize: 30 }}>Share with {peerName}?</h2>
-        <span className="pill" data-tone={expired ? undefined : 'accent'}>
+        <span className="pill" data-tone={expired ? undefined : 'warn'}>
           {expired ? 'Timed out' : `${seconds}s`}
         </span>
       </div>
 
       <div
-        style={{
-          height: 2,
-          background: 'var(--border)',
-          borderRadius: 2,
-          margin: '12px 0',
-        }}
+        className="meter"
+        style={{ margin: '12px 0' }}
+        role="progressbar"
+        aria-label="Time left to confirm"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={Math.round(pct)}
       >
-        <div
-          style={{
-            height: 2,
-            width: `${pct}%`,
-            background: 'var(--accent)',
-            borderRadius: 2,
-          }}
-        />
+        <span style={{ width: `${pct}%` }} />
       </div>
 
       <p className="tiny" style={{ marginTop: 0 }}>
@@ -89,10 +83,12 @@ export function ConfirmPrompt({
       )}
 
       {!youConfirmed && !expired && (
-        <div className="btn-row" style={{ marginTop: 4 }}>
-          <form action={action}>
+        // Confirm takes the width and "Not now" sits beside it. They are not
+        // equals: one is what both people came here to do.
+        <div className="btn-row" style={{ marginTop: 4, flexWrap: 'nowrap' }}>
+          <form action={action} style={{ flex: 1 }}>
             <input type="hidden" name="exchange_id" value={exchangeId} />
-            <button className="btn btn-primary" disabled={pending}>
+            <button className="btn btn-primary" style={{ width: '100%' }} disabled={pending}>
               Confirm
             </button>
           </form>

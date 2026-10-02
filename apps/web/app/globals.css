@@ -40,6 +40,21 @@
 
   --celebrate: linear-gradient(140deg, #f8c4ff 0%, #f0b6e0 100%);
   --celebrate-ink: #2e0f28;
+
+  --grad-bloom: linear-gradient(140deg, #f8c4ff 0%, #f0b6e0 100%);
+  --grad-bloom-ink: #3a1733;
+  --grad-periwinkle: linear-gradient(140deg, #96c4ff 0%, #c9b6f0 100%);
+  --grad-periwinkle-ink: #15213a;
+  --grad-dusk: linear-gradient(140deg, #ffd88a 0%, #f8a0c0 100%);
+  --grad-dusk-ink: #3a2410;
+
+  --warn: #ffae00;
+  --warn-subtle: rgba(255, 174, 0, 0.16);
+  --warn-ink: #ffd68a;
+  --go: #31c431;
+  --go-subtle: rgba(49, 196, 49, 0.16);
+  --go-ink: #8fe88f;
+
   --glow: rgba(248, 196, 255, 0.16);
   --celebrate-edge: #f8c4ff;
   --scrim: rgba(11, 11, 13, 0.85);
@@ -70,6 +85,21 @@
 
   --celebrate: linear-gradient(140deg, #f8c4ff 0%, #f0b6e0 100%);
   --celebrate-ink: #2e0f28;
+
+  --grad-bloom: linear-gradient(140deg, #f8c4ff 0%, #f0b6e0 100%);
+  --grad-bloom-ink: #3a1733;
+  --grad-periwinkle: linear-gradient(140deg, #96c4ff 0%, #c9b6f0 100%);
+  --grad-periwinkle-ink: #15213a;
+  --grad-dusk: linear-gradient(140deg, #ffd88a 0%, #f8a0c0 100%);
+  --grad-dusk-ink: #3a2410;
+
+  --warn: #b37a00;
+  --warn-subtle: rgba(255, 174, 0, 0.18);
+  --warn-ink: #7a4b00;
+  --go: #1e9e35;
+  --go-subtle: rgba(49, 196, 49, 0.16);
+  --go-ink: #176b33;
+
   --glow: rgba(0, 0, 0, 0.1);
   --celebrate-edge: transparent;
   --scrim: rgba(255, 255, 255, 0.85);
@@ -195,8 +225,14 @@ select {
 }
 
 .nav a[data-active='true'] {
-  color: var(--text-primary);
-  background: var(--accent-subtle);
+  color: var(--celebrate-edge);
+  background: var(--glow);
+  border-color: var(--celebrate-edge);
+}
+
+:root[data-theme='daylight'] .nav a[data-active='true'] {
+  background: var(--accent);
+  color: var(--on-accent);
   border-color: var(--accent);
 }
 
@@ -258,6 +294,17 @@ h3 {
   border-bottom-right-radius: var(--radius-lg);
 }
 
+/* The wordmark, sitting inside the wash rather than above it. */
+.hero-mark {
+  display: block;
+  font-family: var(--font-display);
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--celebrate-ink);
+  margin-bottom: 16px;
+}
+
 .hero-title {
   margin: 0;
   font-family: var(--font-display);
@@ -276,6 +323,39 @@ h3 {
   .hero-title {
     font-size: 42px;
   }
+}
+
+/*
+ * The confirmation countdown. Cosmetic -- the database refuses a late
+ * confirmation whether or not this is running -- but a window you cannot see is
+ * a window you will miss.
+ */
+.meter {
+  height: 3px;
+  border-radius: 3px;
+  background: var(--border);
+  overflow: hidden;
+}
+
+.meter > span {
+  display: block;
+  height: 3px;
+  border-radius: 3px;
+  background: var(--celebrate);
+}
+
+/* A row of people: avatar, who they are, what to do about them. */
+.person {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.person > .grow {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 /* A section label: small, wide, quiet. Used where a heading would shout. */
@@ -371,19 +451,35 @@ h3 {
   gap: 12px;
 }
 
+/*
+ * An avatar is a gradient disc, not a grey one. No border: the gradient is the
+ * edge, and an outline on top of it reads as a mistake.
+ *
+ * `data-grad` is chosen from the person's id, so it is stable. See
+ * `avatarGradient` in the shared package for why that matters.
+ */
 .avatar {
-  width: 40px;
-  height: 40px;
+  width: 42px;
+  height: 42px;
   border-radius: 999px;
-  background: var(--accent-subtle);
-  border: 1px solid var(--border);
-  color: var(--text-primary);
+  background: var(--grad-bloom);
+  color: var(--grad-bloom-ink);
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 700;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   flex: none;
+}
+
+.avatar[data-grad='periwinkle'] {
+  background: var(--grad-periwinkle);
+  color: var(--grad-periwinkle-ink);
+}
+
+.avatar[data-grad='dusk'] {
+  background: var(--grad-dusk);
+  color: var(--grad-dusk-ink);
 }
 
 .with-avatar {
@@ -456,13 +552,16 @@ textarea {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  padding: 10px 16px;
-  border-radius: var(--radius-md);
+  /* 44px is the smallest thing a thumb reliably hits, and this app is used
+     standing up, in a hurry, in front of someone. */
+  min-height: 44px;
+  padding: 10px 20px;
+  border-radius: var(--radius-sm);
   border: 1px solid var(--border);
   background: var(--surface-raised);
   color: var(--text-primary);
   font-size: 15px;
-  font-weight: 500;
+  font-weight: 600;
   cursor: pointer;
   text-decoration: none;
 }
@@ -475,6 +574,7 @@ textarea {
   background: var(--accent);
   border-color: var(--accent);
   color: var(--on-accent);
+  font-weight: 700;
 }
 
 .btn-primary:hover {
@@ -484,6 +584,9 @@ textarea {
 
 .btn-quiet {
   background: transparent;
+  border-color: var(--border-strong);
+  color: var(--text-secondary);
+  font-weight: 500;
 }
 
 .btn-danger {
@@ -491,7 +594,8 @@ textarea {
 }
 
 .btn-sm {
-  padding: 6px 11px;
+  min-height: 36px;
+  padding: 6px 13px;
   font-size: 13px;
   border-radius: var(--radius-sm);
 }
@@ -535,6 +639,10 @@ textarea {
   border-radius: 999px;
   background: var(--text-muted);
   flex: none;
+}
+
+.dot[data-live='true'] {
+  background: var(--go);
 }
 
 .share[data-on='true'] .dot {
@@ -654,11 +762,45 @@ textarea {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 3px 10px;
+  padding: 4px 11px;
   border-radius: 999px;
   border: 1px solid var(--border);
   font-size: 12px;
+  font-weight: 600;
   color: var(--text-secondary);
+}
+
+/*
+ * Three semantic pills. `celebrate` marks something good, `warn` counts down,
+ * `go` is settled. Each is an edge over a low fill, with ink chosen to be read
+ * against the page rather than against the fill, since the fill is nearly
+ * transparent.
+ *
+ * On daylight the celebratory one fills with the gradient instead of tinting,
+ * for the same reason .glowing does: a pale tint on white is nothing.
+ */
+.pill[data-tone='celebrate'] {
+  border-color: var(--celebrate-edge);
+  background: var(--glow);
+  color: var(--celebrate-edge);
+}
+
+:root[data-theme='daylight'] .pill[data-tone='celebrate'] {
+  background: var(--celebrate);
+  color: var(--celebrate-ink);
+  border-color: transparent;
+}
+
+.pill[data-tone='warn'] {
+  border-color: var(--warn);
+  background: var(--warn-subtle);
+  color: var(--warn-ink);
+}
+
+.pill[data-tone='go'] {
+  border-color: var(--go);
+  background: var(--go-subtle);
+  color: var(--go-ink);
 }
 
 .pill[data-tone='accent'] {
@@ -745,8 +887,14 @@ textarea {
 }
 
 .toplink[data-active='true'] {
-  color: var(--text-primary);
-  background: var(--accent-subtle);
+  color: var(--celebrate-edge);
+  background: var(--glow);
+  border-color: var(--celebrate-edge);
+}
+
+:root[data-theme='daylight'] .toplink[data-active='true'] {
+  background: var(--accent);
+  color: var(--on-accent);
   border-color: var(--accent);
 }
 

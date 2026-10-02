@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { asUser } from '@/lib/db';
 import { requireUser } from '@/lib/session';
+import { avatarGradient } from '@guy/shared';
 import { cardName, initials, type ContactCard } from '@/components/Card';
 import { formatDate, formatInstant } from '@/lib/dates';
 
@@ -8,6 +9,8 @@ export const dynamic = 'force-dynamic';
 
 type Row = {
   connection_id: string;
+  /** The account the card belongs to. Seeds their avatar's gradient. */
+  other_id: string;
   username: string;
   card: ContactCard;
   how_we_met: string | null;
@@ -57,7 +60,13 @@ export default async function ContactsPage() {
             className="card card-tight row-link"
           >
             <div className="with-avatar">
-              <span className="avatar">{initials(r.card)}</span>
+              <span
+                className="avatar"
+                data-grad={avatarGradient(r.other_id)}
+                aria-hidden="true"
+              >
+                {initials(r.card)}
+              </span>
               <div style={{ minWidth: 0, flex: 1 }}>
                 <div className="row-head">
                   <h3 style={{ margin: 0 }}>{cardName(r.card, r.username)}</h3>
@@ -74,7 +83,7 @@ export default async function ContactsPage() {
                 )}
                 <div className="btn-row" style={{ marginTop: 10 }}>
                   {r.want_follow_up && (
-                    <span className="pill" data-tone="accent">
+                    <span className="pill" data-tone="celebrate">
                       Wants follow-up
                     </span>
                   )}

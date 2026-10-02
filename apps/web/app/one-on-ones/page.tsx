@@ -86,7 +86,7 @@ export default async function OneOnOnesPage() {
           <Link className="card card-tight row-link" href={`/one-on-ones/${r.id}`} key={r.id}>
             <div className="row-head">
               <h3 style={{ margin: 0 }}>{r.peer_name}</h3>
-              <span className="pill" data-tone={r.status === 'scheduled' ? 'accent' : undefined}>
+              <span className="pill" data-tone={r.status === 'scheduled' ? 'celebrate' : undefined}>
                 {r.status}
               </span>
             </div>
