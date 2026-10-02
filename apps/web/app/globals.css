@@ -240,6 +240,44 @@ h3 {
   margin: 0 0 8px;
 }
 
+/*
+ * The gradient wash behind a sign-in headline.
+ *
+ * It escapes the shell's 16px gutter by exactly that much, which on a phone is
+ * edge to edge and on a desktop is a band the width of the column. The obvious
+ * alternative -- `width: 100vw` with negative margins -- is a trap: `vw`
+ * includes the scrollbar, so on any desktop that shows one the page gains a
+ * horizontal scroll. This cannot.
+ */
+.hero {
+  margin: -8px -16px 0;
+  padding: 52px 20px 36px;
+  background: var(--celebrate);
+  color: var(--celebrate-ink);
+  border-bottom-left-radius: var(--radius-lg);
+  border-bottom-right-radius: var(--radius-lg);
+}
+
+.hero-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 52px;
+  font-weight: 600;
+  line-height: 0.98;
+  letter-spacing: -0.03em;
+  color: var(--celebrate-ink);
+}
+
+@media (max-width: 560px) {
+  .hero {
+    padding: 40px 16px 28px;
+  }
+
+  .hero-title {
+    font-size: 42px;
+  }
+}
+
 /* A section label: small, wide, quiet. Used where a heading would shout. */
 .eyebrow {
   font-size: 13px;

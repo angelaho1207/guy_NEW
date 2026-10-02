@@ -35,9 +35,14 @@ export function ConfirmPrompt({
   const pct = Math.max(0, Math.min(100, (left / CONFIRMATION_TIMEOUT_MS) * 100));
 
   return (
-    <div className="card" style={{ borderColor: expired ? undefined : 'var(--accent)' }}>
+    // `glowing` is the expressive treatment, and the one place a theme changes
+    // the treatment rather than a value: on midnight it is a lit edge blooming
+    // onto the dark ground, on daylight the gradient fills the card, because
+    // light cast onto white is invisible. An expired prompt is an ordinary card
+    // again -- nothing about a timed-out exchange is celebratory.
+    <div className={expired ? 'card' : 'card glowing'}>
       <div className="row-head">
-        <h3 style={{ margin: 0 }}>Share with {peerName}?</h3>
+        <h2 style={{ margin: 0, fontSize: 30 }}>Share with {peerName}?</h2>
         <span className="pill" data-tone={expired ? undefined : 'accent'}>
           {expired ? 'Timed out' : `${seconds}s`}
         </span>
