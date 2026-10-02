@@ -22,6 +22,11 @@ const PUBLIC_PATHS = [
   // Readable by anyone, including the app stores, which require a reachable
   // policy before they will review anything.
   '/privacy',
+  // The browser fetches this to decide whether the app is installable, and it
+  // does not always carry a session when it does. Behind the sign-in redirect it
+  // came back as a redirect to /login, and Add to Home Screen quietly stopped
+  // being offered.
+  '/manifest.webmanifest',
 ];
 
 export async function middleware(request: NextRequest) {
