@@ -1,36 +1,94 @@
 /*
- * Dark mode only for v1, per the brief.
+ * Two themes, one set of names.
  *
- * These values mirror `colors` in packages/shared/src/theme.ts, which is the
- * source of truth shared with the mobile app. A test fails if they drift.
+ * These values mirror `midnight` and `daylight` in
+ * packages/shared/src/theme.ts, which is the source of truth shared with the
+ * mobile app. A test fails if they drift, and the same test fails if any text
+ * colour stops clearing WCAG AA against its own background.
+ *
+ * `:root` is midnight, so a browser running no JavaScript gets the dark theme
+ * rather than an unstyled one. The viewer's system preference is resolved into
+ * an explicit `data-theme` before first paint by a small script in layout.tsx,
+ * which is why there is no `prefers-color-scheme` block here: one would mean
+ * writing the light palette twice, and two copies of a palette is the exact
+ * thing this file is trying not to have.
+ *
+ * The rule the palette follows: colour is decoration, contrast is action.
+ * `--accent` is near-neutral and draws every control. `--celebrate` carries all
+ * the personality and never means anything.
  */
 
-:root {
+:root,
+:root[data-theme='midnight'] {
   --bg: #0b0b0d;
   --surface: #17171a;
   --surface-raised: #1f1f23;
   --border: #2a2a2e;
+  --border-strong: #3a3a40;
 
   --text-primary: #f2f1ee;
   --text-secondary: #9a9a9e;
-  --text-muted: #6a6a70;
+  --text-muted: #8a8a90;
 
-  --accent: #8c2f42;
-  --accent-pressed: #732636;
-  --accent-subtle: rgba(140, 47, 66, 0.16);
-  --on-accent: #f7f2f3;
+  --accent: #f2f1ee;
+  --accent-pressed: #d8d6d1;
+  --accent-subtle: rgba(242, 241, 238, 0.12);
+  --on-accent: #0b0b0d;
 
-  --danger: #b3423c;
-  --success: #3f7d62;
+  --danger: #ff9b95;
+  --success: #7fe0a8;
 
-  --radius-sm: 6px;
-  --radius-md: 10px;
-  --radius-lg: 16px;
-
-  --font-sans: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
-    system-ui, sans-serif;
+  --celebrate: linear-gradient(140deg, #f8c4ff 0%, #f0b6e0 100%);
+  --celebrate-ink: #2e0f28;
+  --glow: rgba(248, 196, 255, 0.16);
+  --celebrate-edge: #f8c4ff;
+  --scrim: rgba(11, 11, 13, 0.85);
+  --qr-paper: #ffffff;
+  --qr-ink: #0b0b0d;
 
   color-scheme: dark;
+}
+
+:root[data-theme='daylight'] {
+  --bg: #ffffff;
+  --surface: #f6f4f8;
+  --surface-raised: #ffffff;
+  --border: #e4e4e8;
+  --border-strong: #cccccc;
+
+  --text-primary: #000000;
+  --text-secondary: #666666;
+  --text-muted: #757575;
+
+  --accent: #000000;
+  --accent-pressed: #333333;
+  --accent-subtle: rgba(0, 0, 0, 0.07);
+  --on-accent: #ffffff;
+
+  --danger: #b3231c;
+  --success: #1e7a3c;
+
+  --celebrate: linear-gradient(140deg, #f8c4ff 0%, #f0b6e0 100%);
+  --celebrate-ink: #2e0f28;
+  --glow: rgba(0, 0, 0, 0.1);
+  --celebrate-edge: transparent;
+  --scrim: rgba(255, 255, 255, 0.85);
+  --qr-paper: #ffffff;
+  --qr-ink: #0b0b0d;
+
+  color-scheme: light;
+}
+
+/* Not colours, so they live once and apply to both themes. */
+:root {
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 20px;
+
+  --font-sans: 'Hanken Grotesk', -apple-system, BlinkMacSystemFont, 'Segoe UI',
+    system-ui, sans-serif;
+  --font-display: 'Outfit', 'Hanken Grotesk', -apple-system, system-ui,
+    sans-serif;
 }
 
 *,
@@ -76,7 +134,7 @@ select {
   position: sticky;
   top: 0;
   z-index: 10;
-  background: rgba(11, 11, 13, 0.85);
+  background: var(--scrim);
   backdrop-filter: blur(12px);
   border-bottom: 1px solid var(--border);
 }
@@ -113,7 +171,7 @@ select {
   justify-content: center;
   gap: 4px;
   padding: 10px 16px calc(10px + env(safe-area-inset-bottom, 0px));
-  background: rgba(11, 11, 13, 0.85);
+  background: var(--scrim);
   backdrop-filter: blur(12px);
   border-top: 1px solid var(--border);
 }
@@ -159,21 +217,64 @@ select {
 /* --- Type ---------------------------------------------------------------- */
 
 h1 {
-  font-size: 30px;
-  line-height: 1.2;
-  letter-spacing: -0.02em;
-  margin: 28px 0 6px;
+  font-family: var(--font-display);
+  font-size: 44px;
+  font-weight: 600;
+  line-height: 1.02;
+  letter-spacing: -0.03em;
+  margin: 24px 0 8px;
 }
 
 h2 {
-  font-size: 19px;
+  font-family: var(--font-display);
+  font-size: 28px;
+  font-weight: 600;
+  line-height: 1.1;
   margin: 32px 0 12px;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.02em;
 }
 
 h3 {
-  font-size: 15px;
+  font-size: 18px;
+  font-weight: 600;
   margin: 0 0 8px;
+}
+
+/* A section label: small, wide, quiet. Used where a heading would shout. */
+.eyebrow {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+/* The expressive surface. Decoration carrying copy, never a control: the
+   gradient is light in both themes, so its ink is dark in both. */
+.celebrate {
+  background: var(--celebrate);
+  color: var(--celebrate-ink);
+  border: none;
+}
+
+.celebrate .tiny,
+.celebrate .field-label {
+  color: var(--celebrate-ink);
+  opacity: 0.78;
+}
+
+/* Midnight lets a celebratory card bloom onto the ground behind it. Daylight
+   cannot -- light on white is invisible -- so there the gradient fills the card
+   instead. One of the few places a treatment, not a value, has to differ. */
+:root[data-theme='midnight'] .glowing {
+  border: 1px solid var(--celebrate-edge);
+  box-shadow: 0 0 28px var(--glow);
+}
+
+:root[data-theme='daylight'] .glowing {
+  background: var(--celebrate);
+  color: var(--celebrate-ink);
+  border: none;
 }
 
 .lede {
@@ -205,7 +306,7 @@ h3 {
 .card {
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-md);
   padding: 20px;
   margin-bottom: 12px;
 }
@@ -221,7 +322,7 @@ h3 {
 }
 
 .row-link:hover {
-  border-color: #3a3a40;
+  border-color: var(--border-strong);
   background: var(--surface-raised);
 }
 
@@ -329,7 +430,7 @@ textarea {
 }
 
 .btn:hover {
-  border-color: #3a3a40;
+  border-color: var(--border-strong);
 }
 
 .btn-primary {
@@ -383,7 +484,7 @@ textarea {
 
 .share[data-on='true'] {
   color: var(--text-secondary);
-  border-color: #3a3a40;
+  border-color: var(--border-strong);
 }
 
 .share:hover {
@@ -554,8 +655,10 @@ textarea {
   color: var(--text-secondary);
 }
 
+/* A light quiet zone around the pattern, in both themes: see --qr-paper. */
 .qr {
-  background: #f2f1ee;
+  background: var(--qr-paper);
+  color: var(--qr-ink);
   padding: 16px;
   border-radius: var(--radius-lg);
   display: inline-block;

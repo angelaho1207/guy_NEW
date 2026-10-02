@@ -1,6 +1,7 @@
 import { asUser } from '@/lib/db';
 import { requireUser } from '@/lib/session';
 import { ProfileForm } from '@/components/ProfileForm';
+import { ThemeToggle } from '@/components/ThemeToggle';
 
 export const dynamic = 'force-dynamic';
 
@@ -36,6 +37,9 @@ export default async function ProfilePage() {
       </div>
 
       <ProfileForm profile={profile} shares={shares} />
+
+      <h2>Settings</h2>
+      <ThemeToggle />
     </>
   );
 }

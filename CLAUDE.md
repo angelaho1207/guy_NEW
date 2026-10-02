@@ -57,9 +57,20 @@ there is no build step and no test framework dependency.
 - The field list exists in SQL (`public.profile_field`) and in TypeScript
   (`packages/shared/src/fields.ts`). A test parses the migration and fails if
   they diverge. Change both.
-- Dark mode only for v1. Colours come from `packages/shared/src/theme.ts`, not
-  from literals. The accent is a deep muted burgundy used sparingly, never a
-  bright red or pink.
+- Two themes, `midnight` (dark) and `daylight` (light), in
+  `packages/shared/src/theme.ts`. They carry identical token names and differ
+  only in values, so a component never knows which ground it is on. Colours come
+  from tokens, never from literals: a literal renders correctly on one theme and
+  wrong on the other, and a test asserts both themes match the stylesheet.
+- **Colour is decoration. Contrast is action.** `--accent` draws every control
+  and is deliberately near-neutral: near-white on midnight, black on daylight.
+  All the personality lives in `--celebrate`, a gradient that is never a control
+  and never carries meaning. A coloured Confirm button on a screen that is about
+  to exchange two people's personal information reads as a trick; a black one
+  does not. (This replaces the earlier deep-burgundy accent rule.)
+- Text colours are contrast-checked by a test, not by eye. `--text-muted`
+  renders the shared-but-empty `-`, so it has to clear WCAG AA or the difference
+  between "blank" and "withheld" stops being visible.
 - Migrations are append-only and numbered. Never edit one that has been applied
   to a real database.
 - A shared field that is empty renders as `-`, not omitted. A field that was

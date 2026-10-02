@@ -2,39 +2,165 @@
  * Design tokens, shared by the web app and the mobile app so the two cannot
  * drift apart.
  *
- * Dark mode only for v1, per the brief. The structure here anticipates a light
- * theme without building one: swap the token values and nothing else changes.
+ * ## The rule the palette follows
  *
- * The starting palette came from the brief and is explicitly adjustable. The
- * only hard rule is that the accent stays a deep, muted burgundy and is used
- * sparingly, for primary actions, active states and notification badges. Never
- * a bright or neon red or pink.
+ * **Colour is decoration. Contrast is action.** Every button, badge and active
+ * state is drawn in `accent`, which is deliberately near-neutral: near-white on
+ * the dark ground, pure black on the light one. All the personality lives in
+ * `celebrate`, a gradient that is never a control and never carries meaning.
+ *
+ * That split is what lets the app look like it belongs to the people using it
+ * without looking untrustworthy. A neon "Confirm" button on a screen that is
+ * about to exchange two people's personal information reads as a trick. A
+ * black one does not, and the gradient behind it still says this is a good
+ * moment.
+ *
+ * ## Two themes
+ *
+ * `midnight` and `daylight` carry the same keys and differ only in values.
+ * Every component reads tokens, never literals, so switching the ground is a
+ * token swap and nothing else — with the handful of genuine exceptions noted in
+ * globals.css, where a treatment rather than a value has to change.
+ *
+ * A test asserts both themes against the web stylesheet, and asserts that every
+ * text colour clears WCAG AA against its own background. Neon on near-black and
+ * grey on white are both easy to get wrong, so that check is automated rather
+ * than remembered.
  */
 
-export const colors = {
-  background: '#0B0B0D',
-  surface: '#17171A',
+export type ThemeColors = {
+  background: string;
+  surface: string;
   /** One step above `surface`, for cards resting on a raised sheet. */
-  surfaceRaised: '#1F1F23',
-  border: '#2A2A2E',
+  surfaceRaised: string;
+  border: string;
+  /** A border that has to be seen: a hover edge, a quiet button's outline. */
+  borderStrong: string;
 
-  textPrimary: '#F2F1EE',
-  textSecondary: '#9A9A9E',
-  /** Placeholder copy in an empty text box, and shared-but-empty "-" values. */
-  textMuted: '#6A6A70',
+  textPrimary: string;
+  textSecondary: string;
+  /** Placeholder copy, and the shared-but-empty "-". Must clear AA. */
+  textMuted: string;
 
-  accent: '#8C2F42',
-  /** Pressed state for an accent-filled control. */
-  accentPressed: '#732636',
+  /** Near-neutral by design. Primary actions, active states, badges. */
+  accent: string;
+  accentPressed: string;
   /** Accent at low opacity, for a tint behind an active row. */
-  accentSubtle: 'rgba(140, 47, 66, 0.16)',
-  /** Text and icons that sit on top of an accent fill. */
-  onAccent: '#F7F2F3',
+  accentSubtle: string;
+  /** Text and icons on top of an accent fill. */
+  onAccent: string;
 
-  /** Destructive actions. Distinct from the accent so the two never blur. */
-  danger: '#B3423C',
-  success: '#3F7D62',
-} as const;
+  danger: string;
+  success: string;
+
+  /** The expressive gradient. Decoration only: never a control. */
+  celebrate: string;
+  /** Text laid over `celebrate`. Dark in both themes, because the gradient is. */
+  celebrateInk: string;
+  /** The bloom a celebratory surface casts on the ground behind it. */
+  glow: string;
+  /** The lit edge of a celebratory surface. Unused where it cannot be seen. */
+  celebrateEdge: string;
+  /** The translucent fill behind the fixed top and bottom bars. */
+  scrim: string;
+  /**
+   * The quiet zone behind a QR code. Light in BOTH themes, with no dark
+   * counterpart: a scanner needs a light field around the pattern, so this is
+   * one token whose value is a fact about cameras rather than a style choice.
+   */
+  qrPaper: string;
+  /** Ink on that quiet zone. Dark in both themes, for the same reason. */
+  qrInk: string;
+};
+
+export type Theme = {
+  name: string;
+  /** Drives the CSS `color-scheme` property, so form controls match. */
+  scheme: 'dark' | 'light';
+  colors: ThemeColors;
+};
+
+export const midnight: Theme = {
+  name: 'midnight',
+  scheme: 'dark',
+  colors: {
+    background: '#0B0B0D',
+    surface: '#17171A',
+    surfaceRaised: '#1F1F23',
+    border: '#2A2A2E',
+    borderStrong: '#3A3A40',
+
+    textPrimary: '#F2F1EE',
+    textSecondary: '#9A9A9E',
+    textMuted: '#8A8A90',
+
+    accent: '#F2F1EE',
+    accentPressed: '#D8D6D1',
+    accentSubtle: 'rgba(242, 241, 238, 0.12)',
+    onAccent: '#0B0B0D',
+
+    danger: '#FF9B95',
+    success: '#7FE0A8',
+
+    celebrate: 'linear-gradient(140deg, #F8C4FF 0%, #F0B6E0 100%)',
+    celebrateInk: '#2E0F28',
+    glow: 'rgba(248, 196, 255, 0.16)',
+    celebrateEdge: '#F8C4FF',
+    scrim: 'rgba(11, 11, 13, 0.85)',
+    qrPaper: '#FFFFFF',
+    qrInk: '#0B0B0D',
+  },
+};
+
+export const daylight: Theme = {
+  name: 'daylight',
+  scheme: 'light',
+  colors: {
+    background: '#FFFFFF',
+    surface: '#F6F4F8',
+    surfaceRaised: '#FFFFFF',
+    border: '#E4E4E8',
+    borderStrong: '#CCCCCC',
+
+    textPrimary: '#000000',
+    textSecondary: '#666666',
+    textMuted: '#757575',
+
+    accent: '#000000',
+    accentPressed: '#333333',
+    accentSubtle: 'rgba(0, 0, 0, 0.07)',
+    onAccent: '#FFFFFF',
+
+    danger: '#B3231C',
+    success: '#1E7A3C',
+
+    celebrate: 'linear-gradient(140deg, #F8C4FF 0%, #F0B6E0 100%)',
+    celebrateInk: '#2E0F28',
+    glow: 'rgba(0, 0, 0, 0.1)',
+    celebrateEdge: 'transparent',
+    scrim: 'rgba(255, 255, 255, 0.85)',
+    qrPaper: '#FFFFFF',
+    qrInk: '#0B0B0D',
+  },
+};
+
+export const themes = { midnight, daylight } as const;
+
+export type ThemeName = keyof typeof themes;
+
+export const THEME_NAMES = ['midnight', 'daylight'] as const;
+
+/**
+ * What you get before anyone has chosen, and what a browser with no JavaScript
+ * renders. The app resolves the viewer's system preference into an explicit
+ * choice on first paint; this is the fallback when it cannot.
+ */
+export const DEFAULT_THEME: ThemeName = 'midnight';
+
+/** The mobile app and older code read this. It is the dark theme's palette. */
+export const colors = midnight.colors;
+
+export type ColorToken = keyof ThemeColors;
 
 export const space = {
   xs: 4,
@@ -45,28 +171,35 @@ export const space = {
   xxl: 48,
 } as const;
 
+/** Button 8, card 12, hero 20, pill full — the reference's proportions. */
 export const radius = {
-  sm: 6,
-  md: 10,
-  lg: 16,
+  sm: 8,
+  md: 12,
+  lg: 20,
   pill: 999,
 } as const;
 
 /**
- * A clean, modern sans-serif with a clear hierarchy. The stack resolves to the
- * platform UI face first, which is what makes it feel native on each device.
+ * Two faces. Outfit is a geometric sans with slightly rounded letterforms that
+ * carries confidence at large sizes, which is the whole job of the display
+ * face. Hanken Grotesk is the workhorse: neutral, legible at 13px, and it has
+ * the heavy weights the display face borrows for emphasis.
  */
 export const fontFamily = {
-  sans: 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, sans-serif',
+  sans: "'Hanken Grotesk', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif",
+  display: "'Outfit', 'Hanken Grotesk', -apple-system, system-ui, sans-serif",
 } as const;
 
+/**
+ * Display and title run large with tight tracking, which is where the
+ * reference gets its character. Everything from `heading` down is ordinary and
+ * should stay ordinary: these are the sizes people read paragraphs at.
+ */
 export const type = {
-  display: { size: 32, lineHeight: 38, weight: '600' },
-  title: { size: 22, lineHeight: 28, weight: '600' },
-  heading: { size: 17, lineHeight: 24, weight: '600' },
-  body: { size: 16, lineHeight: 24, weight: '400' },
-  label: { size: 13, lineHeight: 18, weight: '500' },
-  caption: { size: 12, lineHeight: 16, weight: '400' },
+  display: { size: 44, lineHeight: 46, weight: '600', tracking: '-0.03em' },
+  title: { size: 28, lineHeight: 32, weight: '600', tracking: '-0.02em' },
+  heading: { size: 18, lineHeight: 24, weight: '600', tracking: '0' },
+  body: { size: 16, lineHeight: 24, weight: '400', tracking: '0' },
+  label: { size: 13, lineHeight: 18, weight: '500', tracking: '0' },
+  caption: { size: 12, lineHeight: 16, weight: '400', tracking: '0' },
 } as const;
-
-export type ColorToken = keyof typeof colors;

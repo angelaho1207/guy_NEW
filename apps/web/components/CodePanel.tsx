@@ -57,7 +57,7 @@ export function CodePanel() {
           {code ? (
             <span dangerouslySetInnerHTML={{ __html: code.svg }} />
           ) : (
-            <span style={{ color: '#0B0B0D', lineHeight: '200px' }}>…</span>
+            <span style={{ lineHeight: '200px' }}>…</span>
           )}
         </div>
 
