@@ -57,6 +57,51 @@ export const CONNECT_TOKEN_TTL_SECONDS = 120;
 export const CONNECT_CODE_PATTERN = /^[a-z]{3,8}-[a-z]{3,8}-[a-z]{3,8}$/;
 
 /**
+ * The path a scannable connect link points at, without the origin.
+ *
+ * Deliberately short. A QR code's density grows with the length of what it
+ * holds, and a sparse code scans from further away and in worse light, which is
+ * the whole job.
+ */
+export function connectLinkPath(code: string): string {
+  return `/c/${code}`;
+}
+
+/**
+ * Pulls a connect code out of a link a camera just read.
+ *
+ * Strict on purpose: it accepts only a URL of our own `/c/<code>` shape, and
+ * returns null for anything else, bare words included.
+ *
+ * The temptation is to be generous and also accept three loose words, since that
+ * is what a code looks like. Do not. A camera pointed at the world sees other
+ * people's QR codes, and a poster reading "live laugh love" normalises into
+ * something indistinguishable from a real code. The scanner would redeem it,
+ * fail, and spend one of the caller's eight attempts per minute on a wall.
+ *
+ * Every code we put in a QR is a link, so requiring a link costs nothing.
+ * Typed input goes through `normalizeConnectCode` instead, where being generous
+ * is the whole point.
+ */
+export function connectCodeFromLink(scanned: string): string | null {
+  const text = scanned.trim();
+  if (!/^https?:\/\//i.test(text)) return null;
+
+  let path: string;
+  try {
+    path = new URL(text).pathname;
+  } catch {
+    return null;
+  }
+
+  const match = /\/c\/([^/]+)\/?$/.exec(path);
+  if (!match) return null;
+
+  const code = normalizeConnectCode(decodeURIComponent(match[1]));
+  return CONNECT_CODE_PATTERN.test(code) ? code : null;
+}
+
+/**
  * Tidies what someone typed, the same way `normalize_connect_code()` does.
  *
  * The database normalises again on arrival and its answer is the one that

@@ -2,11 +2,16 @@
 
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
-import { cookies } from 'next/headers';
+import { cookies, headers } from 'next/headers';
 import QRCode from 'qrcode';
 import { asUser } from '@/lib/db';
 import { requireUser, currentUser, SESSION_COOKIE } from '@/lib/session';
-import { PROFILE_FIELDS } from '@guy/shared';
+import {
+  PROFILE_FIELDS,
+  connectLinkPath,
+  connectCodeFromLink,
+  normalizeConnectCode,
+} from '@guy/shared';
 import { toInstantValue } from '@/lib/dates';
 
 /**
@@ -295,6 +300,21 @@ export async function acceptTime(_prev: unknown, formData: FormData) {
  * previous token, so a page that minted while rendering would invalidate the
  * code on screen every time anything else caused a re-render.
  */
+/**
+ * The absolute URL a connect QR points at.
+ *
+ * Built from the request rather than from configuration, so it is right on
+ * localhost, on a Vercel preview and in production without anything being set.
+ * `x-forwarded-proto` is what sits in front of this on Vercel; the fallback to
+ * http is for a local dev server.
+ */
+async function connectLink(code: string): Promise<string> {
+  const head = await headers();
+  const host = head.get('x-forwarded-host') ?? head.get('host') ?? 'localhost:3000';
+  const proto = head.get('x-forwarded-proto') ?? (host.startsWith('localhost') ? 'http' : 'https');
+  return `${proto}://${host}${connectLinkPath(code)}`;
+}
+
 export async function mintToken() {
   const me = await requireUser();
   const rows = await asUser<{ token: string; expires_at: Date }>(
@@ -303,11 +323,17 @@ export async function mintToken() {
   );
   const { token, expires_at } = rows[0];
 
-  const svg = await QRCode.toString(token, {
+  // The QR holds a URL, not the bare code. That is what makes the phone's own
+  // camera app useful: it recognises a link, offers to open it, and the page it
+  // lands on does the redeeming. Encoding the code alone gave a scanner a
+  // meaningless string and no way to act on it.
+  const svg = await QRCode.toString(await connectLink(token), {
     type: 'svg',
     margin: 0,
     width: 200,
-    color: { dark: '#0B0B0D', light: '#F2F1EE' },
+    // Fixed, not themed: a scanner needs dark-on-light whichever theme the
+    // phone showing it happens to be in. Mirrors --qr-paper and --qr-ink.
+    color: { dark: '#0B0B0D', light: '#FFFFFF' },
   });
 
   return { token, expiresAt: toInstantValue(expires_at), svg };
@@ -320,26 +346,34 @@ export async function mintToken() {
  * it, or pick a person, so the whole two-sided flow can be walked through in
  * one browser.
  */
-export async function redeemToken(_prev: unknown, formData: FormData) {
-  const me = await requireUser();
-  const token = String(formData.get('token') ?? '').trim();
+export type RedeemResult =
+  | { exchangeId: string }
+  | { alreadyConnected: true }
+  | { error: string };
 
-  if (token === '') return { error: 'Paste a code first.' };
+/**
+ * Redeems a code, however it arrived: typed, scanned in app, or carried in by a
+ * link from the phone's own camera. One implementation so the three paths cannot
+ * diverge, and so the status handling below is written once.
+ */
+export async function redeemCode(raw: string): Promise<RedeemResult> {
+  const me = await requireUser();
+  // A scanned link is read strictly; anything typed is read generously. The
+  // database normalises again and its answer is the one that counts.
+  const code = connectCodeFromLink(raw) ?? normalizeConnectCode(raw);
+
+  if (code === '') return { error: 'Enter a code first.' };
 
   try {
     const rows = await asUser<{ status: string; exchange_id: string | null }>(
       me.user_id,
       `select * from public.open_exchange($1, 'qr')`,
-      [token],
+      [code],
     );
     const { status, exchange_id } = rows[0];
 
-    // The confirmation prompt is rendered by the page from its own query, so
-    // it only appears once the page is told to render again.
     revalidatePath('/connect');
 
-    // `invalid` and `rate_limited` come back as results rather than as thrown
-    // errors. See OpenExchangeStatus in the shared package for why.
     if (status === 'invalid') {
       return {
         error:
@@ -347,9 +381,7 @@ export async function redeemToken(_prev: unknown, formData: FormData) {
       };
     }
     if (status === 'rate_limited') {
-      return {
-        error: 'Too many tries just now. Wait a minute and try again.',
-      };
+      return { error: 'Too many tries just now. Wait a minute and try again.' };
     }
     if (status === 'already_connected') {
       return { alreadyConnected: true as const };
@@ -358,6 +390,12 @@ export async function redeemToken(_prev: unknown, formData: FormData) {
   } catch (err) {
     return { error: message(err) };
   }
+}
+
+export async function redeemToken(_prev: unknown, formData: FormData) {
+  // The typed path. Everything it does lives in redeemCode, which the scanner
+  // and the scanned link also use.
+  return redeemCode(String(formData.get('token') ?? ''));
 }
 
 /**

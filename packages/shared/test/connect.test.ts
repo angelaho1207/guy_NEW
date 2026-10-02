@@ -12,6 +12,8 @@ import {
   confirmationTimeLeftMs,
   CONNECT_CODE_PATTERN,
   normalizeConnectCode,
+  connectCodeFromLink,
+  connectLinkPath,
 } from '../src/connect.ts';
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
@@ -145,5 +147,73 @@ describe('connect codes', () => {
     // The two helpers have to agree, or the UI will reject what the database
     // would have taken.
     assert.match(normalizeConnectCode('  BRISK  stubborn_OTTER '), CONNECT_CODE_PATTERN);
+  });
+});
+
+describe('reading a scanned code', () => {
+  // A QR holds a URL so that a phone's own camera app can act on it. The in-app
+  // scanner reads the same QR, so it gets the same URL. Anything typed arrives
+  // bare. All of it funnels through here.
+
+  test('the link path is short, because QR density follows length', () => {
+    assert.equal(connectLinkPath('brisk-stubborn-otter'), '/c/brisk-stubborn-otter');
+  });
+
+  test('a full link gives up its code', () => {
+    for (const url of [
+      'https://guy.example/c/brisk-stubborn-otter',
+      'http://localhost:3000/c/brisk-stubborn-otter',
+      'https://guy.example/c/brisk-stubborn-otter/',
+      'HTTPS://GUY.EXAMPLE/c/BRISK-STUBBORN-OTTER',
+    ]) {
+      assert.equal(connectCodeFromLink(url), 'brisk-stubborn-otter', url);
+    }
+  });
+
+  test('a bare code is NOT accepted from a scan', () => {
+    // Deliberately strict. Three loose words are indistinguishable from a real
+    // code, so a poster reading "live laugh love" would otherwise be redeemed
+    // and would spend one of the caller's eight attempts a minute.
+    assert.equal(connectCodeFromLink('  Brisk Stubborn Otter '), null);
+    assert.equal(connectCodeFromLink('just some text'), null);
+    // Typed input is where generosity belongs.
+    assert.equal(normalizeConnectCode('  Brisk Stubborn Otter '), 'brisk-stubborn-otter');
+  });
+
+  test('another QR code is not mistaken for one of ours', () => {
+    // A camera pointed at the world sees plenty of QR codes. Every one of these
+    // has to come back null so the scanner keeps looking instead of trying to
+    // redeem a WiFi password.
+    for (const other of [
+      'https://example.com/',
+      'https://guy.example/contacts',
+      'https://guy.example/c/',
+      'WIFI:S:CoffeeShop;T:WPA;P:hunter2;;',
+      'tel:+16505550142',
+      'mailto:someone@example.com',
+      'just some text',
+      '',
+      '   ',
+    ]) {
+      assert.equal(connectCodeFromLink(other), null, other || '(empty)');
+    }
+  });
+
+  test('a link whose code is the wrong shape is refused, not trimmed into one', () => {
+    // The danger here is being too generous: turning a near-miss into a real
+    // code would mean scanning one thing and connecting to another.
+    for (const url of [
+      'https://guy.example/c/brisk-stubborn',
+      'https://guy.example/c/brisk-stubborn-otter-extra',
+      'https://guy.example/c/x-y-z',
+    ]) {
+      assert.equal(connectCodeFromLink(url), null, url);
+    }
+  });
+
+  test('a code survives the round trip through a link', () => {
+    const code = 'glossy-patient-heron';
+    const url = `https://guy.example${connectLinkPath(code)}`;
+    assert.equal(connectCodeFromLink(url), code);
   });
 });

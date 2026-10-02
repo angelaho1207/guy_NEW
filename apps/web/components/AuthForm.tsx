@@ -4,7 +4,13 @@ import Link from 'next/link';
 import { useActionState } from 'react';
 import { signUp, signIn } from '@/app/auth-actions';
 
-export function AuthForm({ mode }: { mode: 'signup' | 'login' }) {
+export function AuthForm({
+  mode,
+  next,
+}: {
+  mode: 'signup' | 'login';
+  next?: string;
+}) {
   const isSignup = mode === 'signup';
   const [state, action, pending] = useActionState(
     isSignup ? signUp : signIn,
@@ -13,6 +19,7 @@ export function AuthForm({ mode }: { mode: 'signup' | 'login' }) {
 
   return (
     <form action={action} className="card" style={{ marginTop: 24 }}>
+      {next && <input type="hidden" name="next" value={next} />}
       <label className="field">
         <span className="field-label">Username</span>
         <input

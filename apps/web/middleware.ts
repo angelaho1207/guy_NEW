@@ -48,6 +48,9 @@ export async function middleware(request: NextRequest) {
   if (!user && !isPublic) {
     const url = request.nextUrl.clone();
     url.pathname = '/login';
+    // Carried so a scanned connect code survives signing in. Codes last two
+    // minutes, so losing one to a redirect means losing the connection.
+    url.searchParams.set('next', path + request.nextUrl.search);
     return NextResponse.redirect(url);
   }
 

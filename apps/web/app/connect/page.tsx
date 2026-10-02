@@ -1,6 +1,7 @@
 import { asUser } from '@/lib/db';
 import { requireUser } from '@/lib/session';
 import { ScanBox } from '@/components/ScanBox';
+import { QrScanner } from '@/components/QrScanner';
 import { NearbyPanel } from '@/components/NearbyPanel';
 import { ConfirmPrompt } from '@/components/ConfirmPrompt';
 import { CodePanel } from '@/components/CodePanel';
@@ -73,6 +74,8 @@ export default async function ConnectPage() {
         list reaches.
       </p>
       <CodePanel />
+
+      <QrScanner />
 
       <ScanBox />
     </>

@@ -83,6 +83,21 @@ export async function signUp(_prev: unknown, formData: FormData) {
   redirect('/profile');
 }
 
+/**
+ * Where to send someone after signing in, when a redirect brought them here.
+ *
+ * Only a path on this site, and only one that looks like a path. An open
+ * redirect is the classic way this goes wrong: a crafted `next` pointing at
+ * another origin turns our sign-in page into a convincing way to send someone
+ * somewhere else. A leading `//` is also rejected, because browsers read that
+ * as protocol-relative and it would leave the site.
+ */
+function safeNext(value: FormDataEntryValue | null): string | null {
+  const next = typeof value === 'string' ? value.trim() : '';
+  if (!next.startsWith('/') || next.startsWith('//')) return null;
+  return next;
+}
+
 export async function signIn(_prev: unknown, formData: FormData) {
   const username = String(formData.get('username') ?? '').trim().toLowerCase();
   const password = String(formData.get('password') ?? '');
@@ -113,7 +128,7 @@ export async function signIn(_prev: unknown, formData: FormData) {
   if (error) return wrong;
 
   revalidatePath('/', 'layout');
-  redirect('/contacts');
+  redirect(safeNext(formData.get('next')) ?? '/contacts');
 }
 
 export async function signOut() {
