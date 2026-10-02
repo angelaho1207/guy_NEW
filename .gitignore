@@ -20,3 +20,8 @@ coverage/
 
 # the demo dev server's own build output
 apps/web/.next-demo/
+
+# Next regenerates this on every build, and it points at whichever distDir
+# ran last -- .next for 'npm run dev', .next-demo for 'npm run dev:demo'. Left
+# tracked it flaps in every diff depending on which server was started.
+apps/web/next-env.d.ts
