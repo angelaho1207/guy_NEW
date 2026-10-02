@@ -49,15 +49,51 @@ describe('connect tokens', () => {
     stranger = await db.createUser('stranger', 'Sam', 'Stranger');
   });
 
-  test('a code is not a user id', async () => {
+  test('a code is three words, and not a user id', async () => {
+    // Length used to stand in for entropy here. It cannot any more: the code is
+    // now short on purpose, and 0011 carries the arithmetic. What this still has
+    // to prove is the shape, and that the code says nothing about whose it is.
     const minted = row<{ token: string }>(
       await db.as(alice, `select * from public.mint_connect_token(120)`),
     );
-    assert.ok(minted.token.length >= 40, 'the code must carry real entropy');
+    assert.match(
+      minted.token,
+      /^[a-z]{3,8}-[a-z]{3,8}-[a-z]{3,8}$/,
+      'a code is three lowercase words joined with hyphens',
+    );
     assert.ok(
       !minted.token.includes(alice),
       'the code must not embed the account id it belongs to',
     );
+  });
+
+  test('its words come from the three lists, in order', async () => {
+    const minted = row<{ token: string }>(
+      await db.as(alice, `select * from public.mint_connect_token(120)`),
+    );
+    const [first, second, third] = minted.token.split('-');
+    const kindOf = async (word: string) =>
+      row<{ kind: string }>(
+        await db.admin(`select kind from public.connect_words where word = $1`, [word]),
+      )?.kind;
+
+    assert.equal(await kindOf(first), 'physical');
+    assert.equal(await kindOf(second), 'personality');
+    assert.equal(await kindOf(third), 'animal');
+  });
+
+  test('two codes in a row differ', async () => {
+    // Not a distribution test. A mint that returned the same words every time
+    // would still pass every other test in this file.
+    const seen = new Set<string>();
+    for (let i = 0; i < 12; i += 1) {
+      seen.add(
+        row<{ token: string }>(
+          await db.as(alice, `select * from public.mint_connect_token(120)`),
+        ).token,
+      );
+    }
+    assert.ok(seen.size > 8, `only ${seen.size} distinct codes in 12 mints`);
   });
 
   test('a code can only be redeemed once', async () => {
@@ -66,12 +102,13 @@ describe('connect tokens', () => {
     );
     await db.as(stranger, `select * from public.open_exchange($1, 'qr')`, [minted.token]);
 
-    const err = await db.asExpectingFailure(
-      stranger,
-      `select * from public.open_exchange($1, 'qr')`,
-      [minted.token],
+    // A spent code returns 'invalid' rather than raising. 0011 explains why:
+    // the rate limiter has to record the attempt, and a row written in a
+    // transaction that then raises is a row that never existed.
+    const again = row<{ status: string }>(
+      await db.as(stranger, `select * from public.open_exchange($1, 'qr')`, [minted.token]),
     );
-    assert.match(err, /expired or already used/);
+    assert.equal(again.status, 'invalid');
   });
 
   test('a screenshotted code stops working once it expires', async () => {
@@ -83,12 +120,10 @@ describe('connect tokens', () => {
       [minted.token],
     );
 
-    const err = await db.asExpectingFailure(
-      stranger,
-      `select * from public.open_exchange($1, 'qr')`,
-      [minted.token],
+    const spent = row<{ status: string }>(
+      await db.as(stranger, `select * from public.open_exchange($1, 'qr')`, [minted.token]),
     );
-    assert.match(err, /expired or already used/);
+    assert.equal(spent.status, 'invalid');
   });
 
   test('opening the code screen again retires the previous code', async () => {
@@ -100,12 +135,10 @@ describe('connect tokens', () => {
     );
     assert.notEqual(first.token, second.token);
 
-    const err = await db.asExpectingFailure(
-      stranger,
-      `select * from public.open_exchange($1, 'qr')`,
-      [first.token],
+    const retired = row<{ status: string }>(
+      await db.as(stranger, `select * from public.open_exchange($1, 'qr')`, [first.token]),
     );
-    assert.match(err, /expired or already used/);
+    assert.equal(retired.status, 'invalid');
 
     // The code currently on screen still works.
     await db.as(stranger, `select * from public.open_exchange($1, 'qr')`, [second.token]);

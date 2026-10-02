@@ -282,15 +282,13 @@ describe('reaching someone you are not standing next to', () => {
   test('there is no way to open an exchange by naming an account', async () => {
     const target = await db.createUser('target', 'Tara', 'Target');
 
-    const err = await db.asExpectingFailure(
-      bob,
-      `select * from public.open_exchange($1, 'uwb')`,
-      [target],
+    const named = row<{ status: string }>(
+      await db.as(bob, `select * from public.open_exchange($1, 'uwb')`, [target]),
     );
-    assert.match(
-      err,
-      /expired or already used/,
-      'an account id is not a token, so it simply does not resolve',
+    assert.equal(
+      named.status,
+      'invalid',
+      'an account id is not a code, so it simply does not resolve',
     );
 
     const n = row<{ n: number }>(
@@ -302,13 +300,86 @@ describe('reaching someone you are not standing next to', () => {
     assert.equal(Number(n.n), 0, 'no prompt was raised on the target');
   });
 
-  test('a guessed token gets nowhere', async () => {
-    const err = await db.asExpectingFailure(
-      bob,
-      `select * from public.open_exchange($1, 'uwb')`,
-      ['not-a-real-token-aaaaaaaaaaaaaaaaaaaaaaaa'],
+  test('a guessed code gets nowhere', async () => {
+    const guessed = row<{ status: string; exchange_id: string | null }>(
+      await db.as(bob, `select * from public.open_exchange($1, 'uwb')`, [
+        'brisk-stubborn-otter',
+      ]),
     );
-    assert.match(err, /expired or already used/);
+    assert.equal(guessed.status, 'invalid');
+    assert.equal(guessed.exchange_id, null, 'and no exchange was opened');
+  });
+
+  test('a wrong code is counted, so guessing runs out', async () => {
+    // The whole reason a bad code returns rather than raises: the attempt has to
+    // survive the transaction to be counted. See 0011.
+    const guesser = await db.createUser('guesser', 'Gus', 'Guess');
+    const limit = Number(
+      row<{ n: number }>(await db.admin(`select public.connect_attempt_limit() as n`)).n,
+    );
+
+    for (let i = 0; i < limit; i += 1) {
+      const r = row<{ status: string }>(
+        await db.as(guesser, `select * from public.open_exchange($1, 'qr')`, [
+          `wrong-guess-number${i}`,
+        ]),
+      );
+      assert.equal(r.status, 'invalid', `guess ${i} should read as invalid`);
+    }
+
+    const blocked = row<{ status: string }>(
+      await db.as(guesser, `select * from public.open_exchange($1, 'qr')`, ['one-more-try']),
+    );
+    assert.equal(blocked.status, 'rate_limited', 'the limit has to actually bite');
+  });
+
+  test('and a real code still works for someone who has not been guessing', async () => {
+    // The limit is per caller. One person burning their allowance must not stop
+    // anybody else connecting.
+    const host = await db.createUser('host', 'Hana', 'Host');
+    const guest = await db.createUser('guest', 'Gil', 'Guest');
+    const minted = row<{ token: string }>(
+      await db.as(host, `select * from public.mint_connect_token(120)`),
+    );
+    const opened = row<{ status: string }>(
+      await db.as(guest, `select * from public.open_exchange($1, 'qr')`, [minted.token]),
+    );
+    assert.equal(opened.status, 'opened');
+  });
+
+  test('a typo does not lock someone out of their own connection', async () => {
+    // The limit exists for guessing, not for fat fingers on a phone keyboard.
+    // Two wrong attempts then the right one has to work.
+    const host = await db.createUser('host2', 'Hana', 'Host');
+    const guest = await db.createUser('guest2', 'Gil', 'Guest');
+    const minted = row<{ token: string }>(
+      await db.as(host, `select * from public.mint_connect_token(120)`),
+    );
+
+    for (const typo of ['brisk-stubborn-ottre', 'brsk-stubborn-otter']) {
+      await db.as(guest, `select * from public.open_exchange($1, 'qr')`, [typo]);
+    }
+
+    const opened = row<{ status: string }>(
+      await db.as(guest, `select * from public.open_exchange($1, 'qr')`, [minted.token]),
+    );
+    assert.equal(opened.status, 'opened', 'two typos must not cost the connection');
+  });
+
+  test('what someone typed is read generously', async () => {
+    // Case, spaces, underscores and stray hyphens all have to work: people read
+    // these aloud and type them in a hurry.
+    const host = await db.createUser('host3', 'Hana', 'Host');
+    const minted = row<{ token: string }>(
+      await db.as(host, `select * from public.mint_connect_token(120)`),
+    );
+    const typed = minted.token.toUpperCase().replace(/-/g, ' ');
+
+    const guest = await db.createUser('guest3', 'Gil', 'Guest');
+    const opened = row<{ status: string }>(
+      await db.as(guest, `select * from public.open_exchange($1, 'qr')`, [`  ${typed}  `]),
+    );
+    assert.equal(opened.status, 'opened');
   });
 
   test('an overheard token stops working once it is spent', async () => {
@@ -329,12 +400,10 @@ describe('reaching someone you are not standing next to', () => {
     assert.equal(opened.status, 'opened');
 
     // Eve overheard the same broadcast and tries to reuse it.
-    const err = await db.asExpectingFailure(
-      eve,
-      `select * from public.open_exchange($1, 'uwb')`,
-      [minted.token],
+    const reused = row<{ status: string }>(
+      await db.as(eve, `select * from public.open_exchange($1, 'uwb')`, [minted.token]),
     );
-    assert.match(err, /expired or already used/);
+    assert.equal(reused.status, 'invalid');
   });
 
   test('a token is useless once it expires, even unspent', async () => {
@@ -348,12 +417,10 @@ describe('reaching someone you are not standing next to', () => {
       [minted.token],
     );
 
-    const err = await db.asExpectingFailure(
-      bob,
-      `select * from public.open_exchange($1, 'uwb')`,
-      [minted.token],
+    const stale = row<{ status: string }>(
+      await db.as(bob, `select * from public.open_exchange($1, 'uwb')`, [minted.token]),
     );
-    assert.match(err, /expired or already used/);
+    assert.equal(stale.status, 'invalid');
   });
 
   test('both paths redeem the same kind of token', async () => {

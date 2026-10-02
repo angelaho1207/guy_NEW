@@ -20,6 +20,7 @@ import m0007 from '../../../supabase/migrations/0007_pgcrypto_search_path.sql';
 import m0008 from '../../../supabase/migrations/0008_whatsapp_messenger_enum.sql';
 import m0009 from '../../../supabase/migrations/0009_whatsapp_messenger.sql';
 import m0010 from '../../../supabase/migrations/0010_drop_discord_id.sql';
+import m0011 from '../../../supabase/migrations/0011_word_connect_codes.sql';
 
 const MIGRATIONS: [string, string][] = [
   ['0001_init.sql', m0001],
@@ -32,6 +33,7 @@ const MIGRATIONS: [string, string][] = [
   ['0008_whatsapp_messenger_enum.sql', m0008],
   ['0009_whatsapp_messenger.sql', m0009],
   ['0010_drop_discord_id.sql', m0010],
+  ['0011_word_connect_codes.sql', m0011],
 ];
 
 /**

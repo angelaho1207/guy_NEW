@@ -10,6 +10,8 @@ import {
   TAP_DISTANCE_METRES,
   isTap,
   confirmationTimeLeftMs,
+  CONNECT_CODE_PATTERN,
+  normalizeConnectCode,
 } from '../src/connect.ts';
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
@@ -91,5 +93,57 @@ describe('deciding that two phones touched', () => {
 
   test('the boundary itself counts', () => {
     assert.equal(isTap(TAP_DISTANCE_METRES, 500), true);
+  });
+});
+
+describe('connect codes', () => {
+  // The shape and the tidying, mirrored from normalize_connect_code() in 0011.
+  // The database normalises again on arrival and its answer is the one that
+  // counts; this is here so the UI can avoid a round trip for something
+  // obviously unfinished.
+
+  test('a minted code matches the pattern', () => {
+    assert.match('brisk-stubborn-otter', CONNECT_CODE_PATTERN);
+    assert.match('icy-wry-yak', CONNECT_CODE_PATTERN);
+  });
+
+  test('the pattern refuses what is not a code', () => {
+    for (const no of [
+      'brisk-stubborn',
+      'brisk-stubborn-otter-extra',
+      'Brisk-Stubborn-Otter',
+      'brisk stubborn otter',
+      'br-stubborn-otter',
+      'xQ8tZmNp3rLk9wVb2sYc7dFg4hJn6aQe1uRt5oPi0xZ',
+      '',
+    ]) {
+      assert.doesNotMatch(no, CONNECT_CODE_PATTERN, no || '(empty)');
+    }
+  });
+
+  test('normalising agrees with the database for the shapes people type', () => {
+    for (const typed of [
+      'Brisk-Stubborn-Otter',
+      'BRISK STUBBORN OTTER',
+      'brisk_stubborn_otter',
+      '  brisk  stubborn  otter  ',
+      'brisk--stubborn--otter',
+      '-brisk-stubborn-otter-',
+      '"brisk-stubborn-otter".',
+    ]) {
+      assert.equal(normalizeConnectCode(typed), 'brisk-stubborn-otter', typed);
+    }
+  });
+
+  test('normalising something unusable gives an empty string', () => {
+    for (const nothing of ['', '   ', '!!!', '12345']) {
+      assert.equal(normalizeConnectCode(nothing), '', nothing || '(empty)');
+    }
+  });
+
+  test('a normalised code is one the pattern accepts', () => {
+    // The two helpers have to agree, or the UI will reject what the database
+    // would have taken.
+    assert.match(normalizeConnectCode('  BRISK  stubborn_OTTER '), CONNECT_CODE_PATTERN);
   });
 });

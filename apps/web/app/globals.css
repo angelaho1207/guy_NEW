@@ -384,6 +384,24 @@ h3 {
   font-size: 17px;
 }
 
+/*
+ * A connect code, as three words.
+ *
+ * Large on purpose: someone reads this off another person's screen from a step
+ * away, in a room that is probably dim and probably loud. Word breaks are
+ * allowed because three words at this size will not always fit a narrow phone,
+ * and a wrapped code is still readable where a clipped one is not.
+ */
+.code-words {
+  margin: 6px 0 12px;
+  font-family: var(--font-display);
+  font-size: 30px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  overflow-wrap: anywhere;
+}
+
 /* A section label: small, wide, quiet. Used where a heading would shout. */
 .eyebrow {
   font-size: 13px;

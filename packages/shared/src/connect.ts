@@ -17,8 +17,20 @@
 
 export type ConnectMethod = 'qr' | 'uwb';
 
-/** What `public.open_exchange()` returns in its `status` column. */
-export type OpenExchangeStatus = 'opened' | 'already_connected';
+/**
+ * What `public.open_exchange()` returns in its `status` column.
+ *
+ * `invalid` and `rate_limited` are returned rather than raised, which is not
+ * the obvious choice. The reason is in migration 0011: redemption is rate
+ * limited, the limiter has to record a failed guess, and a row written in a
+ * transaction that then raises is a row that never existed. So a bad code is a
+ * result, not an error.
+ */
+export type OpenExchangeStatus =
+  | 'opened'
+  | 'already_connected'
+  | 'invalid'
+  | 'rate_limited';
 
 /**
  * How long a freshly minted connect token stays valid.
@@ -28,6 +40,38 @@ export type OpenExchangeStatus = 'opened' | 'already_connected';
  * short enough that a screenshot or an overheard broadcast is soon worthless.
  */
 export const CONNECT_TOKEN_TTL_SECONDS = 120;
+
+/**
+ * The shape of a connect code: three lowercase words joined with hyphens, like
+ * `brisk-stubborn-otter`.
+ *
+ * It used to be 43 characters of base64url, which is unusable on the path where
+ * one person reads a code off another person's screen. Migration 0011 holds the
+ * vocabulary, the entropy arithmetic and why the trade is survivable; the short
+ * version is that a guessed code raises a prompt and shares nothing, because the
+ * mutual confirmation has always been the consent boundary rather than the code.
+ *
+ * Use this to sanity check input before a round trip, never to decide whether a
+ * code is real. Only the database knows that.
+ */
+export const CONNECT_CODE_PATTERN = /^[a-z]{3,8}-[a-z]{3,8}-[a-z]{3,8}$/;
+
+/**
+ * Tidies what someone typed, the same way `normalize_connect_code()` does.
+ *
+ * The database normalises again on arrival and its answer is the one that
+ * counts. This exists so the UI can show a cleaned-up code as the person types
+ * and avoid a round trip for something obviously unfinished.
+ */
+export function normalizeConnectCode(raw: string): string {
+  return raw
+    .trim()
+    .toLowerCase()
+    .replace(/[\s_]+/g, '-')
+    .replace(/[^a-z-]/g, '')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '');
+}
 
 /**
  * When to mint a replacement while the connect screen is still open.

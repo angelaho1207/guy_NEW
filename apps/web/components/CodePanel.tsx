@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { mintToken } from '@/app/actions';
 import {
   CONNECT_TOKEN_REFRESH_SECONDS,
@@ -22,6 +22,7 @@ type Code = { token: string; expiresAt: string; svg: string };
 export function CodePanel() {
   const [code, setCode] = useState<Code | null>(null);
   const [left, setLeft] = useState<number | null>(null);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -50,6 +51,22 @@ export function CodePanel() {
 
   const seconds = left === null ? null : Math.ceil(left / 1000);
 
+  const copy = useCallback(() => {
+    if (!code) return;
+    // Best effort. Clipboard access is refused in some contexts, and the code
+    // is readable on screen regardless -- which is the point of three words.
+    navigator.clipboard
+      ?.writeText(code.token)
+      .then(() => setCopied(true))
+      .catch(() => undefined);
+  }, [code]);
+
+  useEffect(() => {
+    if (!copied) return;
+    const timer = setTimeout(() => setCopied(false), 1500);
+    return () => clearTimeout(timer);
+  }, [copied]);
+
   return (
     <div className="card">
       <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -62,30 +79,32 @@ export function CodePanel() {
         </div>
 
         <div style={{ flex: 1, minWidth: 220 }}>
-          <p className="tiny" style={{ marginTop: 0 }}>
+          <div className="eyebrow">Read this out, or let them scan</div>
+
+          {/* Big, because the whole point of three words is that someone can
+              read them off this screen from a step away. */}
+          <p className="code-words">{code?.token ?? '···'}</p>
+
+          <div className="btn-row">
+            <button
+              type="button"
+              className="btn btn-quiet btn-sm"
+              onClick={copy}
+              disabled={!code}
+            >
+              {copied ? 'Copied' : 'Copy'}
+            </button>
+            {seconds !== null && (
+              <span className="pill" data-tone={seconds < 20 ? 'warn' : undefined}>
+                {seconds}s
+              </span>
+            )}
+          </div>
+
+          <p className="tiny" style={{ marginBottom: 0 }}>
             Good for {CONNECT_TOKEN_TTL_SECONDS} seconds, and only once. It
             replaces itself before it runs out, so what is on screen always
             works.
-            {seconds !== null && (
-              <>
-                {' '}
-                <span className="pill" data-tone={seconds < 20 ? 'warn' : undefined}>
-                  {seconds}s
-                </span>
-              </>
-            )}
-          </p>
-
-          <p className="field-label">Paste this into the other browser</p>
-          <input
-            type="text"
-            readOnly
-            value={code?.token ?? ''}
-            onFocus={(e) => e.currentTarget.select()}
-          />
-          <p className="tiny">
-            On a phone nobody sees this string. It is here so you can walk
-            through both sides of the flow yourself.
           </p>
         </div>
       </div>

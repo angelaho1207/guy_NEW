@@ -4,11 +4,11 @@ import { useActionState } from 'react';
 import { redeemToken } from '@/app/actions';
 
 /**
- * Stands in for the camera.
+ * Typing the other person's code.
  *
- * On a phone the scanner reads the code and this step is invisible. In a
- * browser, pasting the other person's code is the same thing: the server sees
- * a token either way, and never an account id.
+ * Not a stand-in for anything any more: a code is three words now, so reading
+ * it off someone's screen and typing it is a real path rather than a developer
+ * convenience. The server normalises what arrives, so case and spaces are fine.
  *
  * Redeeming does not connect anyone. It opens a handshake that both people
  * still have to confirm, within thirty seconds.
@@ -18,16 +18,24 @@ export function ScanBox() {
 
   return (
     <div className="card">
-      <h3>Scan someone&rsquo;s code</h3>
+      <h3>Type their code</h3>
       <p className="tiny" style={{ marginTop: 0 }}>
-        Paste the code from the other person&rsquo;s screen. Switch who you are
-        viewing as, up top, to play both sides.
+        Three words from the other person&rsquo;s screen. Capitals, spaces and
+        hyphens all work.
       </p>
 
       <form action={action}>
         <label className="field">
           <span className="field-label">Their code</span>
-          <input type="text" name="token" placeholder="Paste the code" autoComplete="off" />
+          <input
+            type="text"
+            name="token"
+            placeholder="brisk-stubborn-otter"
+            autoComplete="off"
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
+          />
         </label>
         <button className="btn btn-primary" disabled={pending}>
           {pending ? 'Opening…' : 'Open exchange'}

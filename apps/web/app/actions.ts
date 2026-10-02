@@ -338,6 +338,19 @@ export async function redeemToken(_prev: unknown, formData: FormData) {
     // it only appears once the page is told to render again.
     revalidatePath('/connect');
 
+    // `invalid` and `rate_limited` come back as results rather than as thrown
+    // errors. See OpenExchangeStatus in the shared package for why.
+    if (status === 'invalid') {
+      return {
+        error:
+          'That code did not work. Check the three words, or ask them to show you a fresh one.',
+      };
+    }
+    if (status === 'rate_limited') {
+      return {
+        error: 'Too many tries just now. Wait a minute and try again.',
+      };
+    }
     if (status === 'already_connected') {
       return { alreadyConnected: true as const };
     }
