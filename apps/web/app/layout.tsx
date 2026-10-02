@@ -14,7 +14,9 @@ export const metadata: Metadata = {
   // Opened from the home screen this fills the screen, including behind the
   // notch, which is why the bars carry safe-area padding.
   appleWebApp: { capable: true, statusBarStyle: 'black-translucent', title: 'Guy' },
-  icons: { icon: '/icon.svg', apple: '/icon.svg' },
+  // iOS ignores SVG for a home screen icon and falls back to a screenshot of
+  // the page, which looks like a mistake. apple-touch-icon must be a PNG.
+  icons: { icon: '/icon.svg', apple: '/apple-touch-icon.png' },
 };
 
 export const viewport: Viewport = {

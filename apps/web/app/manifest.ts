@@ -25,12 +25,14 @@ export default function manifest(): MetadataRoute.Manifest {
     theme_color: midnight.colors.background,
     orientation: 'portrait',
     icons: [
-      {
-        src: '/icon.svg',
-        sizes: 'any',
-        type: 'image/svg+xml',
-        purpose: 'any',
-      },
+      // SVG first, for anything that will take it and scale cleanly.
+      { src: '/icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' },
+      // PNGs for everything that will not, which includes every iPhone.
+      { src: '/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+      { src: '/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
+      // `maskable` lets Android crop to its own shape instead of putting the
+      // whole icon inside a white circle. The art has room at the edges for it.
+      { src: '/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
     ],
   };
 }
