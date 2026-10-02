@@ -1,0 +1,58 @@
+{
+  "expo": {
+    "name": "Guy",
+    "slug": "guy",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "scheme": "guy",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0B0B0D"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.angelaho.guy",
+      "config": {
+        "usesNonExemptEncryption": false
+      },
+      "infoPlist": {
+        "NSCameraUsageDescription": "Guy uses the camera to scan another person's connect code, so the two of you can swap details without typing anything.",
+        "NSLocationWhenInUseUsageDescription": "Guy uses a rough location only while the Connect screen is open, so you and the person in front of you can find each other. It is deleted the moment you leave that screen.",
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "android": {
+      "package": "com.angelaho.guy",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0B0B0D"
+      },
+      "permissions": [
+        "CAMERA",
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
+        "POST_NOTIFICATIONS"
+      ]
+    },
+    "plugins": [
+      "expo-status-bar",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/adaptive-icon.png",
+          "color": "#0B0B0D"
+        }
+      ]
+    ],
+    "extra": {
+      "siteUrl": "https://guynew-virid.vercel.app",
+      "eas": {
+        "projectId": "set-by-eas-init"
+      }
+    }
+  }
+}

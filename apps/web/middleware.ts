@@ -31,6 +31,9 @@ const PUBLIC_PATHS = [
   // Behind the sign-in redirect the database's poke would be answered with a
   // redirect to /login and nothing would ever be sent.
   '/api/push',
+  // Says whether this deployment can reach its database, in one request. It has
+  // to answer when nothing else does, which is the entire point of it.
+  '/api/health',
 ];
 
 export async function middleware(request: NextRequest) {
